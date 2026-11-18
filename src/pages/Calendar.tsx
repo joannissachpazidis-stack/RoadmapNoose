@@ -40,6 +40,7 @@ export function useCalendarItems(onEvent: (e: CalEvent, date: string) => void): 
   const gigs = useCollection('gigs')
   const goals = useCollection('goals')
   const releases = useCollection('releases')
+  const coachMsgs = useCollection('coach')
   return useMemo(() => {
     const items: CalItem[] = []
     for (const e of events)
@@ -54,9 +55,15 @@ export function useCalendarItems(onEvent: (e: CalEvent, date: string) => void): 
       items.push({ date: r.releaseDate, title: `RELEASE: ${r.title}`, kind: 'release', color: '#dc2626', label: 'Release', onClick: () => go('releases', r.id) })
       for (const t of r.tasks) if (!t.done && t.offsetDays !== 0) items.push({ date: addDays(r.releaseDate, t.offsetDays), title: t.text, kind: 'releasetask', color: '#be123c', label: r.title, onClick: () => go('releases', r.id) })
     }
+    // Fristen aus Manager-Briefings (offen oder übernommen)
+    for (const m of coachMsgs)
+      if (m.kind === 'briefing')
+        for (const i of m.items ?? [])
+          if (i.deadline && i.category === 'chance' && (i.status === 'neu' || i.status === 'uebernommen'))
+            items.push({ date: i.deadline, title: `Frist: ${i.title}`, kind: 'goal', color: '#7c3aed', label: 'Chance · ' + (i.type || 'Manager'), onClick: () => go('coach', 'manager') })
     return items.sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, gigs, goals, releases])
+  }, [events, gigs, goals, releases, coachMsgs])
 }
 
 export function EventModal({ event, occurrence, onClose }: { event: Partial<CalEvent>; occurrence?: string; onClose: () => void }) {

@@ -219,6 +219,7 @@ export interface Settings extends Base {
   monthlyFee: number | null
   profileVersion?: number
   coachMode?: CoachMode
+  managerFrequency?: ManagerFrequency
 }
 
 export type CoachMode = 'auto' | 'manual' | 'off'
@@ -241,8 +242,33 @@ export interface CoachSuggestion {
   appliedAt?: number
 }
 
+export type BriefingStatus = 'neu' | 'uebernommen' | 'verworfen' | 'erledigt'
+
+export interface BriefingItem {
+  id: string
+  category: 'chance' | 'news'
+  type: string
+  title: string
+  summary: string
+  relevance: string
+  action: string
+  deadline: string
+  url: string
+  unverified?: boolean
+  timing: 'jetzt' | 'vormerken' | 'info'
+  area: Area
+  status: BriefingStatus
+  goalId?: string
+}
+
+export type ManagerFrequency = 'weekly' | 'biweekly' | 'off'
+
 export interface CoachMessage extends Base {
   role: 'user' | 'coach' | 'event'
+  kind?: 'chat' | 'briefing'
+  items?: BriefingItem[]
+  topic?: string
+  error?: boolean
   text: string
   author: string
   at: number

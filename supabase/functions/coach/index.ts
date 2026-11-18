@@ -1,5 +1,5 @@
 // =====================================================================
-// Band-Coach – Supabase Edge Function
+// Band-Coach & Manager – Supabase Edge Function
 // Liest den aktuellen Stand der Band (nur für eingeloggte Bandmitglieder, per RLS),
 // fragt Claude nach einer kurzen Reaktion mit Fragen & Vorschlägen und speichert die
 // Antwort als Coach-Nachricht – sie erscheint per Realtime sofort bei allen in der App.
@@ -9,10 +9,17 @@
 //   COACH_MODEL         (optional) Standard: claude-opus-5-5 – günstiger z.B. claude-haiku-5-5
 //   COACH_EFFORT        (optional) low | medium | high – Standard: medium
 //   COACH_MAX_PER_HOUR  (optional) Kostenbremse: max. Coach-Antworten pro Band und Stunde (Standard 20)
+//   CRON_SECRET         (für das Mittwochs-Briefing) frei gewähltes Passwort, das auch im Cron-Job steht
+//   MANAGER_MAX_PER_DAY (optional) max. Briefings/Recherchen pro Band und Tag (Standard 3)
+//   MANAGER_MAX_SEARCHES(optional) max. Websuchen pro Briefing (Standard 8)
+//
+// Wichtig: Beim Deploy die JWT-Prüfung von Supabase ausschalten (--no-verify-jwt bzw. im Dashboard),
+// weil der Mittwochs-Job ohne Login aufruft. Die Funktion prüft selbst: Nutzer-Aufrufe über RLS,
+// Cron-Aufrufe über CRON_SECRET.
 // =====================================================================
 import Anthropic from 'npm:@anthropic-ai/sdk@^1.10.0'
 import { betaJSONSchemaOutputFormat } from 'npm:@anthropic-ai/sdk@^1.10.0/helpers/beta/json-schema'
-import { createClient } from 'npm:@supabase/supabase-js@^2.119.1'
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@^2.119.1'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -62,7 +69,7 @@ const PARTS: Record<string, string> = {
   demo: 'Pre-Prod-Demo',
 }
 
-const SYSTEM = `Du bist der Band-Coach in der Roadmap-App einer Band. Du bist ein erfahrener Mentor aus der Musikszene (Metal/Metalcore, DIY- und Newcomer-Bands in Deutschland) und hilfst der Band, voranzukommen und nichts aus den Augen zu verlieren. Du reagierst auf das, was die Band in der App einträgt und abhakt, und auf ihre Nachrichten.
+const SYSTEM = `Du bist Coach und Manager in der Roadmap-App einer Band. Du bist ein erfahrener Mentor und Manager aus der Musikszene (Metal/Metalcore, DIY- und Newcomer-Bands in Deutschland) und hilfst der Band, voranzukommen, Chancen zu nutzen und nichts aus den Augen zu verlieren. Als Manager denkst du auch an Fristen, Bewerbungen, Booking, Netzwerk und Business. Du reagierst auf das, was die Band in der App einträgt und abhakt, und auf ihre Nachrichten.
 
 So arbeitest du:
 - Du bekommst den aktuellen Stand der App als Snapshot und den bisherigen Verlauf. Nachrichten mit "[App-Ereignisse]" zeigen, was sich seit deiner letzten Reaktion geändert hat und wer es eingetragen hat.
@@ -74,6 +81,7 @@ So arbeitest du:
 - Bei unbedeutenden Ereignissen (Kleinigkeiten, Korrekturen) antworte sehr kurz – ohne Fragen und Vorschläge.
 - Achte auf Muster: Engpässe in der Song-Pipeline (z.B. fehlende Vocals), überfällige oder liegengebliebene Ziele, zu viele Fokus-Ziele (mehr als 3), anstehende Termine und Fristen, Abhängigkeiten zwischen Zielen, ungleich verteilte Aufgaben.
 - Erfinde keine Fakten wie Fristen, Preise, Kontaktdaten oder Namen von Veranstaltern. Wenn etwas zu prüfen ist, sag das. Rechtliche und steuerliche Hinweise nur als Orientierung.
+- Alle 1–2 Wochen (mittwochs) und auf Anfrage erstellst du zusätzlich ein Manager-Briefing mit Websuche (im Verlauf als "[Manager-Briefing]" sichtbar). Im Chat selbst kannst du nicht im Web suchen; wenn eine Recherche nötig ist, empfiehl der Band einen Recherche-Auftrag im Tab "Manager". Greif offene Chancen und nahe Fristen aus den Briefings im Chat auf.
 - Du kannst die App nicht selbst ändern: Die Band übernimmt Vorschläge per Klick und beantwortet Fragen per Knopfdruck oder Text. Verweise bei Bedarf auf die Bereiche der App: Übersicht, Roadmap, Songwriting, Releases, Live & Gigs, Kalender, Promo & EPK, Merch, Bandkasse, Band & Orga, Kontakte.
 
 App-Wissen:
@@ -233,44 +241,252 @@ const TRIGGER_TEXT: Record<string, string> = {
 // Modelle, die serverseitige Fallbacks bei Ablehnungen unterstützen
 const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-5', 'claude-fable-5-2', 'claude-fable-5-1']
 
+// ---------------------------------------------------------------------
+// Manager-Briefing: Websuche nach Chancen & News, dann strukturiert aufbereiten
+// ---------------------------------------------------------------------
+
+const RESEARCH_SYSTEM = `Du bist der Manager einer Band und recherchierst im Web nach Neuigkeiten und Chancen, die für genau diese Band relevant sind. Du arbeitest gründlich, ehrlich und mit gesundem Branchenverstand.
+
+Suche vor allem nach (Priorität von oben nach unten):
+1. Chancen zum Bewerben oder Mitmachen: Förderungen und Stipendien (z.B. Pop-Büro Region Stuttgart, Land Baden-Württemberg / POPLÄND, Popakademie, Initiative Musik, Stiftungen), Band-Contests und Newcomer-Wettbewerbe (Metal/Core/Rock), Festivals und Konzertreihen mit Bandaufrufen ("Bands gesucht", Newcomer-Bühnen) in Stuttgart, Baden-Württemberg und Süddeutschland, Aufrufe für lokale Support-Bands, Workshops, Seminare und Netzwerk-Events für Bands, offene Einsendungen für Playlists, Compilations oder Webzines im Metalcore-Bereich.
+2. Neuigkeiten, die die Band konkret betreffen: Szene in Stuttgart/BW (neue Reihen, Venues, Schließungen), relevante Branchen-Änderungen (Streaming, GEMA, Distributoren, Social Media) – nur wenn wirklich relevant.
+
+Regeln:
+- Nur echte, aktuelle Funde aus deiner Suche mit Quelle. Nichts erfinden. Fristen nur nennen, wenn sie in der Quelle stehen. Abgelaufene Fristen weglassen (außer die nächste Runde ist angekündigt).
+- Prüfe die Eignung für den aktuellen Stand der Band (Region, Genre, Erfahrung, ob schon Musik veröffentlicht ist, Besetzung). Kennzeichne das Timing: "jetzt" = passt jetzt und lohnt sich, "vormerken" = interessant, aber Voraussetzungen fehlen noch (z.B. Release, Drummer, Live-Erfahrung), "info" = reine Neuigkeit.
+- Warne vor Pay-to-Play, hohen Teilnahmegebühren oder unseriösen Angeboten.
+- Wiederhole keine Themen, die schon gemeldet wurden, außer es gibt etwas Neues (z.B. die Frist rückt näher oder die Ausschreibung ist jetzt offen).
+- Qualität vor Menge: lieber 3 gute Funde als 10 mittelmäßige, höchstens 8. Wenn du kaum Passendes findest, sag das ehrlich.
+
+Schreibe am Ende eine deutsche Liste deiner Funde. Pro Fund: Kategorie (Chance oder News), Typ (z.B. Förderung, Contest, Festival, Konzertreihe, Support-Slot, Workshop, Playlist, Szene-News, Branche), Titel, Kurzbeschreibung (1–2 Sätze), Warum relevant für diese Band, Frist (YYYY-MM-DD oder "keine Angabe"), Link (exakte URL der Quelle), konkreter nächster Schritt, Timing (jetzt/vormerken/info), passender Bereich (fundament, songwriting, live, release, promo, merch, business, finanzen). Beginne mit 1–2 Sätzen Gesamteinschätzung.`
+
+const FORMAT_SYSTEM = `Du wandelst die Recherche eines Band-Managers in ein strukturiertes Briefing um. Übernimm ausschließlich Funde, die in der Recherche stehen, ändere keine Fakten, Fristen oder URLs. "intro" ist eine kurze, persönliche Einleitung an die Band (2–3 Sätze, Deutsch, per Du). Fristen im Format YYYY-MM-DD oder leer. Höchstens 8 Einträge, wichtigste zuerst (Chancen mit "jetzt" und naher Frist vorne).`
+
+const BRIEFING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['intro', 'items'],
+  properties: {
+    intro: { type: 'string' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['category', 'type', 'title', 'summary', 'relevance', 'action', 'deadline', 'url', 'timing', 'area'],
+        properties: {
+          category: { type: 'string', enum: ['chance', 'news'] },
+          type: { type: 'string' },
+          title: { type: 'string' },
+          summary: { type: 'string' },
+          relevance: { type: 'string' },
+          action: { type: 'string' },
+          deadline: { type: 'string', description: 'YYYY-MM-DD oder leer' },
+          url: { type: 'string' },
+          timing: { type: 'string', enum: ['jetzt', 'vormerken', 'info'] },
+          area: { type: 'string', enum: [...AREAS] },
+        },
+      },
+    },
+  },
+} as const
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
+/** Arbeit im Hintergrund weiterlaufen lassen (Supabase Edge Runtime), sonst normal abwarten */
+const background = (p: Promise<unknown>) => (typeof EdgeRuntime !== 'undefined' ? EdgeRuntime.waitUntil(p) : p)
+
+const normUrl = (u: string) => u.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[#?].*$/, '').replace(/\/+$/, '')
+
+type DB = SupabaseClient
+
+async function loadRows(db: DB, bandId: string): Promise<Row[]> {
+  const rows: Row[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from('records').select('id,collection,data,updated_at,deleted').eq('band_id', bandId).eq('deleted', false).range(from, from + 999)
+    if (error) throw new Error('Daten konnten nicht gelesen werden: ' + error.message)
+    rows.push(...((data ?? []) as Row[]))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
+
+async function saveCoachMessage(db: DB, bandId: string, data: Data) {
+  const now = Date.now()
+  const { error } = await db.from('records').insert({
+    band_id: bandId,
+    id: crypto.randomUUID(),
+    collection: 'coach',
+    data: { author: 'Coach', at: now, createdAt: now, ...data },
+    updated_at: now,
+    updated_by: data.author ?? 'Coach',
+    deleted: false,
+  })
+  if (error) throw new Error('Antwort konnte nicht gespeichert werden: ' + error.message)
+}
+
+function modelOptions() {
+  const model = Deno.env.get('COACH_MODEL') || 'claude-opus-5-5'
+  const effort = (Deno.env.get('COACH_EFFORT') || 'medium') as 'low' | 'medium' | 'high'
+  const fallback = FALLBACK_MODELS.includes(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}
+  return { model, effort, fallback }
+}
+
+async function runBriefing(anthropic: Anthropic, db: DB, bandId: string, rows: Row[], topic: string) {
+  const { model, effort, fallback } = modelOptions()
+  const today = new Date().toISOString().slice(0, 10)
+  const coachRows = rows.filter((r) => r.collection === 'coach').map((r) => r.data)
+  const previous = coachRows
+    .filter((m) => m.kind === 'briefing')
+    .sort((a, b) => Number(b.at) - Number(a.at))
+    .flatMap((m) => (m.items ?? []).map((i: Data) => ({ ...i, at: m.at })))
+    .slice(0, 60)
+  const prevText = previous.length
+    ? previous.map((i) => `- ${i.title}${i.url ? ` (${i.url})` : ''} – Status: ${i.status === 'verworfen' ? 'von der Band als NICHT relevant markiert' : i.status === 'uebernommen' ? 'als Ziel übernommen' : i.status === 'erledigt' ? 'erledigt' : 'offen'}`).join('\n')
+    : '(noch keine)'
+  const prompt = `Heute ist ${today}.
+
+[Band-Profil & aktueller Stand der Roadmap]
+${buildSnapshot(rows.filter((r) => r.collection !== 'coach'), today)}
+
+[Bereits gemeldete Themen – nicht wiederholen, außer es gibt Neues]
+${prevText}
+
+[Auftrag]
+${topic ? `Recherche-Auftrag der Band: ${topic}\nKonzentriere dich darauf, nimm aber wichtige Fristen aus den anderen Bereichen mit, falls sie bald ablaufen.` : 'Erstelle das Manager-Briefing für die nächsten 1–2 Wochen: Chancen, auf die sich die Band jetzt bewerben oder eingehen sollte, und Neuigkeiten, die sie betreffen.'}`
+
+  // Schritt 1: Recherche mit Websuche (pause_turn fortsetzen)
+  const webSearch: Anthropic.Beta.BetaWebSearchTool20260209 = {
+    type: 'web_search_20260209',
+    name: 'web_search',
+    max_uses: Number(Deno.env.get('MANAGER_MAX_SEARCHES') ?? 8),
+    user_location: { type: 'approximate', city: 'Stuttgart', region: 'Baden-Württemberg', country: 'DE', timezone: 'Europe/Berlin' },
+  }
+  const assistantContent: Anthropic.Beta.BetaContentBlockParam[] = []
+  let research: Anthropic.Beta.BetaMessage | null = null
+  for (let i = 0; i < 4; i++) {
+    const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: prompt }]
+    if (assistantContent.length) messages.push({ role: 'assistant', content: assistantContent })
+    research = await anthropic.beta.messages.create({
+      model,
+      max_tokens: 16000,
+      system: RESEARCH_SYSTEM,
+      messages,
+      tools: [webSearch],
+      output_config: { effort },
+      ...fallback,
+    })
+    assistantContent.push(...(research.content as Anthropic.Beta.BetaContentBlockParam[]))
+    if (research.stop_reason !== 'pause_turn') break
+  }
+  if (research?.stop_reason === 'refusal') throw new Error('Die Recherche wurde abgelehnt.')
+
+  // Text + tatsächlich gefundene Quellen einsammeln
+  const found = new Map<string, string>()
+  let researchText = ''
+  for (const b of assistantContent as Data[]) {
+    if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) for (const r of b.content) if (r.url) found.set(normUrl(r.url), r.title ?? '')
+    if (b.type === 'text') {
+      researchText += b.text
+      for (const c of b.citations ?? []) if (c.url) found.set(normUrl(c.url), c.title ?? '')
+    }
+  }
+  if (!researchText.trim()) throw new Error('Die Recherche hat kein Ergebnis geliefert.')
+
+  // Schritt 2: in strukturiertes Briefing umwandeln
+  const formatted = await anthropic.beta.messages.parse({
+    model,
+    max_tokens: 16000,
+    system: FORMAT_SYSTEM,
+    messages: [{ role: 'user', content: `[Recherche]\n${researchText}` }],
+    output_config: { effort: 'low', format: betaJSONSchemaOutputFormat(BRIEFING_SCHEMA) },
+    ...fallback,
+  })
+  const out = formatted.parsed_output
+  if (!out) throw new Error('Das Briefing konnte nicht aufbereitet werden.')
+  const items = out.items.slice(0, 8).map((x) => {
+    // Nur Links behalten, die wirklich in den Suchergebnissen vorkamen
+    const verified = x.url && found.has(normUrl(x.url))
+    return { id: crypto.randomUUID(), ...x, url: verified ? x.url : '', unverified: !verified, deadline: /^\d{4}-\d{2}-\d{2}$/.test(x.deadline) ? x.deadline : '', status: 'neu' }
+  })
+  await saveCoachMessage(db, bandId, { role: 'coach', kind: 'briefing', author: 'Manager', text: out.intro, items, topic: topic || '', model: formatted.model })
+}
+
+async function briefingSafely(anthropic: Anthropic, db: DB, bandId: string, rows: Row[], topic: string) {
+  try {
+    await runBriefing(anthropic, db, bandId, rows, topic)
+  } catch (e) {
+    const msg = e instanceof Anthropic.APIError ? `Claude-API-Fehler ${e.status}: ${e.message}` : (e as Error).message
+    await saveCoachMessage(db, bandId, { role: 'coach', kind: 'briefing', author: 'Manager', text: `Das Briefing konnte leider nicht erstellt werden (${msg}). Versucht es später erneut.`, items: [], error: true }).catch(() => {})
+  }
+}
+
+const BRIEFING_INTERVAL_DAYS: Record<string, number> = { weekly: 6, biweekly: 13 }
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Nur POST' }, 405)
   try {
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY ist in Supabase noch nicht als Secret hinterlegt.' }, 500)
-    const { bandId, trigger = 'events' } = (await req.json()) as { bandId?: string; trigger?: string }
-    if (!bandId) return json({ error: 'bandId fehlt' }, 400)
+    const { bandId, trigger = 'events', topic = '' } = (await req.json()) as { bandId?: string; trigger?: string; topic?: string }
+    const anthropic = new Anthropic({ apiKey })
 
+    // --- Zeitgesteuertes Briefing (pg_cron, mittwochs) ---------------------
+    if (trigger === 'briefing-cron') {
+      const secret = Deno.env.get('CRON_SECRET')
+      if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'Nicht autorisiert' }, 401)
+      const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data: bands, error } = await admin.from('bands').select('id')
+      if (error) throw new Error(error.message)
+      const work = (async () => {
+        for (const b of bands ?? []) {
+          const rows = await loadRows(admin, b.id)
+          const settings = rows.find((r) => r.collection === 'settings')?.data ?? {}
+          const freq = settings.managerFrequency ?? 'biweekly'
+          if (freq === 'off') continue
+          const last = Math.max(0, ...rows.filter((r) => r.collection === 'coach' && r.data.kind === 'briefing' && !r.data.error).map((r) => Number(r.data.at)))
+          if (Date.now() - last < (BRIEFING_INTERVAL_DAYS[freq] ?? 13) * 86400_000) continue
+          await briefingSafely(anthropic, admin, b.id, rows, '')
+        }
+      })()
+      background(work)
+      return json({ ok: true, async: true }, 202)
+    }
+
+    if (!bandId) return json({ error: 'bandId fehlt' }, 400)
     // Supabase-Client mit dem Login der aufrufenden Person -> RLS: nur eigene Band lesbar
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     })
     const { data: band } = await supabase.from('bands').select('id,name').eq('id', bandId).maybeSingle()
-    if (!band) return json({ error: 'Keine Berechtigung für diese Band' }, 403)
-
-    const rows: Row[] = []
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase.from('records').select('id,collection,data,updated_at,deleted').eq('band_id', bandId).eq('deleted', false).range(from, from + 999)
-      if (error) throw new Error('Daten konnten nicht gelesen werden: ' + error.message)
-      rows.push(...((data ?? []) as Row[]))
-      if (!data || data.length < 1000) break
-    }
-
+    if (!band) return json({ error: 'Keine Berechtigung für diese Band (bitte neu einloggen)' }, 403)
+    const rows = await loadRows(supabase, bandId)
     const thread = rows
       .filter((r) => r.collection === 'coach')
       .map((r) => r.data)
       .sort((a, b) => Number(a.at) - Number(b.at))
 
-    // Kostenbremse
+    // --- Manuelles Briefing / Recherche-Auftrag --------------------------------
+    if (trigger === 'briefing') {
+      const maxPerDay = Number(Deno.env.get('MANAGER_MAX_PER_DAY') ?? 3)
+      const today = thread.filter((m) => m.kind === 'briefing' && Number(m.at) > Date.now() - 86400_000).length
+      if (today >= maxPerDay) return json({ error: `Limit erreicht: maximal ${maxPerDay} Briefings/Recherchen pro Tag.` }, 429)
+      background(briefingSafely(anthropic, supabase, bandId, rows, String(topic).slice(0, 500)))
+      return json({ ok: true, async: true }, 202)
+    }
+
+    // --- Coach-Antwort -----------------------------------------------------
     const maxPerHour = Number(Deno.env.get('COACH_MAX_PER_HOUR') ?? 20)
-    const lastHour = thread.filter((m) => m.role === 'coach' && Number(m.at) > Date.now() - 3600_000).length
+    const lastHour = thread.filter((m) => m.role === 'coach' && m.kind !== 'briefing' && Number(m.at) > Date.now() - 3600_000).length
     if (lastHour >= maxPerHour) return json({ error: `Limit erreicht: maximal ${maxPerHour} Coach-Antworten pro Stunde.` }, 429)
 
     // Verlauf -> Messages (nur Text, ohne Thinking-Blöcke)
     const messages: Anthropic.Beta.BetaMessageParam[] = []
     for (const m of thread.slice(-40)) {
-      if (m.role === 'coach') {
+      if (m.role === 'coach' && m.kind === 'briefing') {
+        const items = (m.items ?? []).map((i: Data) => `${i.title} [${i.timing}${i.deadline ? ', Frist ' + i.deadline : ''}; Status: ${i.status}]`).join(' / ')
+        messages.push({ role: 'assistant', content: `[Manager-Briefing] ${cut(m.text, 800)}${items ? '\nFunde: ' + items : ''}` })
+      } else if (m.role === 'coach') {
         let text = cut(m.text, 3000)
         if (m.questions?.length) text += '\n\nMeine Fragen: ' + m.questions.map((x: Data) => x.text).join(' / ')
         if (m.suggestions?.length) text += '\n\nMeine Vorschläge: ' + m.suggestions.map((x: Data) => `${x.title}${x.appliedAt ? ' (übernommen)' : ''}`).join(' / ')
@@ -288,16 +504,14 @@ Deno.serve(async (req) => {
       content: `[Aktueller Stand der App]\n${buildSnapshot(rows.filter((r) => r.collection !== 'coach'), today)}\n\n[Aufgabe]\n${TRIGGER_TEXT[trigger] ?? TRIGGER_TEXT.events}`,
     })
 
-    const model = Deno.env.get('COACH_MODEL') || 'claude-opus-5-5'
-    const effort = (Deno.env.get('COACH_EFFORT') || 'medium') as 'low' | 'medium' | 'high'
-    const anthropic = new Anthropic({ apiKey })
+    const { model, effort, fallback } = modelOptions()
     const response = await anthropic.beta.messages.parse({
       model,
       max_tokens: 16000,
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages,
       output_config: { effort, format: betaJSONSchemaOutputFormat(OUTPUT_SCHEMA) },
-      ...(FALLBACK_MODELS.includes(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+      ...fallback,
     })
 
     let message = ''
@@ -312,18 +526,7 @@ Deno.serve(async (req) => {
     } else {
       message = response.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim() || 'Ich konnte gerade keine Antwort formulieren – versucht es gleich nochmal.'
     }
-
-    const now = Date.now()
-    const { error: insertError } = await supabase.from('records').insert({
-      band_id: bandId,
-      id: crypto.randomUUID(),
-      collection: 'coach',
-      data: { role: 'coach', text: message, questions, suggestions, author: 'Coach', at: now, createdAt: now, model: response.model },
-      updated_at: now,
-      updated_by: 'Coach',
-      deleted: false,
-    })
-    if (insertError) throw new Error('Antwort konnte nicht gespeichert werden: ' + insertError.message)
+    await saveCoachMessage(supabase, bandId, { role: 'coach', text: message, questions, suggestions, model: response.model })
     return json({ ok: true })
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: 'Der Anthropic-API-Key ist ungültig.' }, 502)

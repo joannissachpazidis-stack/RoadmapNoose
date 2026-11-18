@@ -1,6 +1,7 @@
-import { Bot, Check, ClipboardList, Lightbulb, Loader2, Send, Sparkles } from 'lucide-react'
+import { Bot, Check, ClipboardList, Lightbulb, Loader2, Newspaper, Send, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Card, PageHeader, Select, Textarea, cx } from '../components/ui'
+import Manager from '../components/Manager'
+import { Badge, Button, Card, PageHeader, Select, Tabs, Textarea, cx } from '../components/ui'
 import { coach, useCoach } from '../lib/coach'
 import { AREAS } from '../lib/constants'
 import { timeAgo } from '../lib/format'
@@ -93,7 +94,7 @@ export function CoachSetupHint() {
   return (
     <Card className="border-accent/40">
       <div className="mb-1 flex items-center gap-2 font-semibold">
-        <Bot size={18} className="text-accent" /> Coach einrichten
+        <Bot size={18} className="text-accent" /> Coach & Manager einrichten
       </div>
       <p className="text-sm text-muted">
         Der Coach ist Claude, angebunden über eine kleine Funktion in eurem Supabase-Projekt. So bleibt der API-Schlüssel geheim und alle sehen dieselben Antworten.
@@ -107,18 +108,24 @@ export function CoachSetupHint() {
           )
         </li>
         <li>API-Key auf platform.claude.com erstellen (kostenpflichtig nach Verbrauch)</li>
-        <li>Coach-Funktion in Supabase anlegen und Key als Secret hinterlegen – Anleitung in der README, Abschnitt „Band-Coach einrichten“</li>
+        <li>Coach-Funktion in Supabase anlegen und Key als Secret hinterlegen</li>
+        <li>Für das Mittwochs-Briefing: Zeitplan per SQL anlegen – Anleitung für alles in der README, Abschnitt „Coach & Manager einrichten“</li>
       </ol>
     </Card>
   )
 }
 
-export default function Coach() {
+export default function Coach({ param }: { param?: string }) {
   const sync = useSync()
   const state = useCoach()
   const settings = useSettings()
   const messages = [...useCollection('coach')].sort((a, b) => a.at - b.at)
   const [text, setText] = useState('')
+  const [tab, setTab] = useState<'chat' | 'manager'>(param === 'manager' ? 'manager' : 'chat')
+  const lastBriefing = Math.max(0, ...messages.filter((m) => m.kind === 'briefing').map((m) => m.at))
+  useEffect(() => {
+    if (state.briefingSince && lastBriefing > state.briefingSince) coach.briefingArrived()
+  }, [lastBriefing, state.briefingSince])
   const bottom = useRef<HTMLDivElement>(null)
   const available = !!sync.activeBand && !!sync.session
   const mode: CoachMode = settings?.coachMode ?? 'auto'
@@ -137,8 +144,8 @@ export default function Coach() {
   return (
     <div>
       <PageHeader
-        title="Band-Coach"
-        subtitle="Claude begleitet eure Roadmap: Wenn ihr etwas eintragt oder abhakt, reagiert der Coach mit Einordnung, Rückfragen und durchdachten Vorschlägen – sichtbar für die ganze Band. Ihr könnt ihn auch jederzeit direkt fragen."
+        title="Coach & Manager"
+        subtitle="Claude begleitet eure Roadmap: Als Coach reagiert er auf eure Einträge mit Einordnung, Rückfragen und Vorschlägen. Als Manager recherchiert er mittwochs Chancen und News für euch – sichtbar für die ganze Band."
         actions={
           <div className="flex items-center gap-2">
             <Select
@@ -146,8 +153,8 @@ export default function Coach() {
               value={mode}
               onChange={(e) => updateSettings({ coachMode: e.target.value as CoachMode })}
               options={[
-                { value: 'auto', label: 'Reagiert automatisch' },
-                { value: 'manual', label: 'Nur auf Anfrage' },
+                { value: 'auto', label: 'Coach reagiert automatisch' },
+                { value: 'manual', label: 'Coach nur auf Anfrage' },
                 { value: 'off', label: 'Coach aus' },
               ]}
             />
@@ -161,7 +168,20 @@ export default function Coach() {
         </div>
       )}
 
-      {mode !== 'off' && (
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: 'chat', label: 'Coach' },
+          { value: 'manager', label: 'Manager: Chancen & News' },
+        ]}
+      />
+
+      {tab === 'manager' && <Manager />}
+
+      {tab === 'chat' && mode === 'off' && <Card className="text-sm text-muted">Der Coach ist ausgeschaltet. Oben rechts wieder einschalten.</Card>}
+
+      {tab === 'chat' && mode !== 'off' && (
         <>
           <div className="space-y-5">
             {!messages.length && (
@@ -170,7 +190,20 @@ export default function Coach() {
               </Card>
             )}
             {messages.map((m) =>
-              m.role === 'coach' ? (
+              m.kind === 'briefing' ? (
+                <button key={m.id} onClick={() => setTab('manager')} className="ml-11 flex w-[calc(100%-2.75rem)] items-start gap-2 rounded-md border border-violet-900/60 bg-violet-950/20 px-3 py-2 text-left text-sm hover:border-violet-700">
+                  <Newspaper size={16} className="mt-0.5 shrink-0 text-violet-400" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11px] text-muted">Manager-Briefing · {timeAgo(m.at)}</span>
+                    <span className="line-clamp-2">{m.text}</span>
+                    {(m.items?.length ?? 0) > 0 && (
+                      <span className="mt-0.5 block text-xs text-violet-300">
+                        {m.items!.filter((i) => i.category === 'chance').length} Chancen · {m.items!.filter((i) => i.category === 'news').length} News → ansehen
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ) : m.role === 'coach' ? (
                 <CoachBubble key={m.id} m={m} />
               ) : m.role === 'event' ? (
                 <div key={m.id} className="ml-11 rounded-md border border-dashed border-line px-3 py-2 text-xs text-muted">

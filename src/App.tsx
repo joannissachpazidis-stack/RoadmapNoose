@@ -38,11 +38,11 @@ import Roadmap from './pages/Roadmap'
 import Settings from './pages/Settings'
 import Songs from './pages/Songs'
 
-const NAV: { route: Route; label: string; icon: ReactNode; mobile?: boolean }[] = [
+const NAV: { route: Route; label: string; short?: string; icon: ReactNode; mobile?: boolean }[] = [
   { route: 'dashboard', label: 'Übersicht', icon: <LayoutDashboard size={18} />, mobile: true },
   { route: 'roadmap', label: 'Roadmap', icon: <Flag size={18} />, mobile: true },
   { route: 'songs', label: 'Songwriting', icon: <Music size={18} />, mobile: true },
-  { route: 'coach', label: 'Coach', icon: <Bot size={18} />, mobile: true },
+  { route: 'coach', label: 'Coach & Manager', short: 'Coach', icon: <Bot size={18} />, mobile: true },
   { route: 'releases', label: 'Releases', icon: <Disc3 size={18} /> },
   { route: 'live', label: 'Live & Gigs', icon: <Mic2 size={18} /> },
   { route: 'kalender', label: 'Kalender', icon: <CalendarDays size={18} /> },
@@ -134,7 +134,7 @@ export default function App() {
       page = <Settings />
       break
     case 'coach':
-      page = <CoachPage />
+      page = <CoachPage key={param} param={param} />
       break
     default:
       page = <Dashboard />
@@ -201,7 +201,7 @@ export default function App() {
         {NAV.filter((n) => n.mobile).map((n) => (
           <a key={n.route} href={'#/' + n.route} className={cx('relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px]', route === n.route ? 'text-accent' : 'text-zinc-500')}>
             {n.icon}
-            {n.label}
+            {n.short ?? n.label}
             {n.route === 'coach' && unread > 0 && <span className="absolute right-1/4 top-1 h-2 w-2 rounded-full bg-accent" />}
           </a>
         ))}

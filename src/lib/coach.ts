@@ -2,7 +2,7 @@
 // über die Supabase Edge Function "coach" darauf reagieren. Antworten landen als
 // Nachrichten in der Sammlung "coach" und sind für alle Bandmitglieder sichtbar.
 import { useSyncExternalStore } from 'react'
-import type { CoachMessage, CoachSuggestion } from '../types'
+import type { BriefingItem, CoachMessage, CoachSuggestion } from '../types'
 import { AREAS, CONTACT_TYPES, GIG_STATUS, GOAL_STATUS, RELEASE_STATUS, SONG_PARTS, SONG_STAGES, STAGE_INDEX } from './constants'
 import { fmtDate } from './format'
 import { store, uid } from './store'
@@ -105,10 +105,22 @@ export interface CoachState {
   busy: boolean
   error: string
   queue: string[]
+  briefingSince: number // > 0: ein Briefing wurde angefordert und läuft im Hintergrund
+}
+
+const AREA_PHASE: Record<string, string> = {
+  fundament: 'phase-fundament',
+  business: 'phase-fundament',
+  songwriting: 'phase-songs',
+  release: 'phase-release',
+  promo: 'phase-release',
+  finanzen: 'phase-release',
+  live: 'phase-buehne',
+  merch: 'phase-wachstum',
 }
 
 class Coach {
-  state: CoachState = { busy: false, error: '', queue: [] }
+  state: CoachState = { busy: false, error: '', queue: [], briefingSince: 0 }
   private listeners = new Set<() => void>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private scope = ''
@@ -214,6 +226,65 @@ class Coach {
     } finally {
       this.set({ busy: false })
     }
+  }
+
+  /** Manager-Briefing / Recherche-Auftrag anstoßen (läuft 1–3 Minuten im Hintergrund) */
+  async requestBriefing(topic = '') {
+    if (!this.available()) {
+      this.set({ error: 'Der Manager braucht den Cloud-Sync (Supabase) und die eingerichtete Coach-Funktion – siehe "Sync & Einstellungen".' })
+      return
+    }
+    this.set({ error: '', briefingSince: Date.now() })
+    try {
+      const { error } = await sync.client!.functions.invoke('coach', { body: { bandId: sync.state.activeBand!.id, trigger: 'briefing', topic } })
+      if (error) {
+        let msg = error.message
+        const ctx = (error as { context?: Response }).context
+        if (ctx && typeof ctx.json === 'function') {
+          try {
+            const body = await ctx.json()
+            if (body?.error) msg = body.error
+          } catch {
+            /* ignore */
+          }
+        }
+        throw new Error(msg)
+      }
+      // Ergebnis kommt per Realtime; nach 5 Minuten Anzeige zurücksetzen
+      setTimeout(() => this.state.briefingSince && Date.now() - this.state.briefingSince > 290_000 && this.set({ briefingSince: 0 }), 300_000)
+    } catch (e) {
+      this.set({ error: 'Manager nicht erreichbar: ' + (e as Error).message, briefingSince: 0 })
+    }
+  }
+
+  briefingArrived() {
+    if (this.state.briefingSince) this.set({ briefingSince: 0 })
+  }
+
+  updateItem(msg: CoachMessage, itemId: string, patch: Partial<BriefingItem>) {
+    store.put('coach', { id: msg.id, items: (msg.items ?? []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) })
+  }
+
+  /** Chance aus dem Briefing als Ziel in die Roadmap übernehmen (inkl. Frist) */
+  itemToGoal(msg: CoachMessage, item: BriefingItem) {
+    store.mute(() => {
+      const phases = store.list('phases')
+      const phaseId = phases.some((p) => p.id === AREA_PHASE[item.area]) ? AREA_PHASE[item.area] : (phases[0]?.id ?? '')
+      const goalId = store.put('goals', {
+        title: item.title,
+        description: item.summary + (item.url ? `\nLink: ${item.url}` : ''),
+        why: item.relevance,
+        phaseId,
+        area: item.area in AREAS ? item.area : 'business',
+        status: 'offen',
+        ownerIds: [],
+        due: item.deadline,
+        focus: false,
+        tasks: item.action ? [{ id: uid(), text: item.action, done: false }] : [],
+        lastTouched: Date.now(),
+      })
+      this.updateItem(msg, item.id, { status: 'uebernommen', goalId })
+    })
   }
 
   answer(msg: CoachMessage, questionId: string, answer: string) {

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Bot, CalendarDays, ClipboardCheck, Lightbulb, Star } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, CalendarDays, ClipboardCheck, Lightbulb, Newspaper, Star } from 'lucide-react'
 import { useState } from 'react'
 import GoalModal from '../components/GoalModal'
 import { Button, Card, PageHeader, Progress, SectionTitle, Stat } from '../components/ui'
@@ -9,6 +9,7 @@ import { useCollection, useSettings } from '../lib/store'
 import { useSync } from '../lib/sync'
 import type { Goal } from '../types'
 import { useCalendarItems } from './Calendar'
+import { useOpenChances } from '../components/Manager'
 import { GoalCard, ReviewModal, SuggestionList } from './Roadmap'
 
 export default function Dashboard() {
@@ -22,11 +23,14 @@ export default function Dashboard() {
   const sync = useSync()
   const [edit, setEdit] = useState<Goal | null>(null)
   const [review, setReview] = useState(false)
+  const today = todayISO()
   const items = useCalendarItems(() => go('kalender'))
   const coachMsgs = [...useCollection('coach')].filter((m) => m.role === 'coach').sort((a, b) => b.at - a.at)
   const lastCoach = coachMsgs[0]
+  const chances = useOpenChances()
+    .filter(({ item }) => item.status === 'neu' && (!item.deadline || item.deadline >= today))
+    .sort((a, b) => (a.item.deadline || '9999').localeCompare(b.item.deadline || '9999'))
   const openQuestions = coachMsgs.slice(0, 5).reduce((a, m) => a + (m.questions ?? []).filter((q) => !m.answered?.includes(q.id)).length, 0)
-  const today = todayISO()
 
   const focus = goals.filter((g) => g.focus && g.status !== 'erledigt')
   const overdue = goals.filter((g) => g.due && g.status !== 'erledigt' && g.status !== 'pausiert' && (daysUntil(g.due) ?? 0) < 0)
@@ -127,6 +131,22 @@ export default function Dashboard() {
             <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-sm">{lastCoach.text}</div>
           </div>
           <ArrowRight size={16} className="mt-1 shrink-0 text-muted" />
+        </Card>
+      )}
+
+      {chances.length > 0 && (
+        <Card onClick={() => go('coach', 'manager')} className="mb-5 border-violet-800/60">
+          <div className="mb-1 flex items-center gap-2 text-xs text-muted">
+            <Newspaper size={14} className="text-violet-400" /> Manager: {chances.length} neue Chance{chances.length > 1 ? 'n' : ''}
+          </div>
+          <ul className="space-y-0.5 text-sm">
+            {chances.slice(0, 3).map(({ item }) => (
+              <li key={item.id} className="flex gap-2">
+                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                {item.deadline && <span className={(daysUntil(item.deadline) ?? 99) <= 14 ? 'shrink-0 text-xs text-red-400' : 'shrink-0 text-xs text-muted'}>Frist {relDays(item.deadline)}</span>}
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 
