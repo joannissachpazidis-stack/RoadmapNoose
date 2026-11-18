@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, Lightbulb, Star } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, CalendarDays, ClipboardCheck, Lightbulb, Star } from 'lucide-react'
 import { useState } from 'react'
 import GoalModal from '../components/GoalModal'
 import { Button, Card, PageHeader, Progress, SectionTitle, Stat } from '../components/ui'
@@ -23,6 +23,9 @@ export default function Dashboard() {
   const [edit, setEdit] = useState<Goal | null>(null)
   const [review, setReview] = useState(false)
   const items = useCalendarItems(() => go('kalender'))
+  const coachMsgs = [...useCollection('coach')].filter((m) => m.role === 'coach').sort((a, b) => b.at - a.at)
+  const lastCoach = coachMsgs[0]
+  const openQuestions = coachMsgs.slice(0, 5).reduce((a, m) => a + (m.questions ?? []).filter((q) => !m.answered?.includes(q.id)).length, 0)
   const today = todayISO()
 
   const focus = goals.filter((g) => g.focus && g.status !== 'erledigt')
@@ -111,6 +114,19 @@ export default function Dashboard() {
           <Button variant="primary" onClick={() => setReview(true)}>
             Check starten
           </Button>
+        </Card>
+      )}
+
+      {lastCoach && (
+        <Card onClick={() => go('coach')} className="mb-5 flex gap-3 border-accent/40">
+          <Bot size={22} className="shrink-0 text-accent" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-xs text-muted">
+              Band-Coach {openQuestions > 0 && <span className="rounded-full bg-yellow-600 px-1.5 text-[10px] font-bold text-white">{openQuestions} offene Frage{openQuestions > 1 ? 'n' : ''}</span>}
+            </div>
+            <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-sm">{lastCoach.text}</div>
+          </div>
+          <ArrowRight size={16} className="mt-1 shrink-0 text-muted" />
         </Card>
       )}
 

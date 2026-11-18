@@ -13,6 +13,7 @@ export type Route =
   | 'orga'
   | 'kontakte'
   | 'einstellungen'
+  | 'coach'
 
 function parse(): { route: Route; param: string } {
   const h = window.location.hash.replace(/^#\/?/, '')

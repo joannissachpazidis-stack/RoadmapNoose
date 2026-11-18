@@ -31,7 +31,20 @@ class Store {
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   /** wird von sync.ts gesetzt, um lokale Änderungen hochzuladen */
   onLocalWrite: ((recs: Rec[]) => void) | null = null
+  /** wird vom Coach genutzt, um Ereignisse zu erkennen (nur lokale Änderungen durch Nutzer:innen) */
+  onLocalChange: ((collection: string, prev: Record<string, unknown> | undefined, next: Record<string, unknown> | undefined, id: string) => void) | null = null
+  private muted = 0
   author = ''
+
+  /** Änderungen ohne Ereignis-Tracking ausführen (z.B. Start-Daten, Migration) */
+  mute<T>(fn: () => T): T {
+    this.muted++
+    try {
+      return fn()
+    } finally {
+      this.muted--
+    }
+  }
 
   constructor() {
     this.load('local')
@@ -160,6 +173,7 @@ class Store {
       this.pending.add(id)
       changed.push(rec)
       ids.push(id)
+      if (!this.muted) this.onLocalChange?.(collection, prev && !prev.deleted ? prev.data : undefined, rec.data, id)
     }
     this.emit()
     this.onLocalWrite?.(changed)
@@ -170,6 +184,7 @@ class Store {
     const prev = this.recs.get(id)
     if (!prev) return
     const rec: Rec = { ...prev, deleted: true, updatedAt: Math.max(Date.now(), prev.updatedAt + 1), updatedBy: this.author }
+    if (!this.muted && !prev.deleted) this.onLocalChange?.(prev.collection, prev.data, undefined, id)
     this.recs.set(id, rec)
     this.pending.add(id)
     this.emit()

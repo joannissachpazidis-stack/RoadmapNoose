@@ -188,7 +188,7 @@ class Sync {
     this.channel?.unsubscribe()
     this.channel = null
     if (store.scope !== 'local') store.load('local')
-    if (!store.hasData()) seedInitialData()
+    if (!store.hasData()) store.mute(() => seedInitialData())
     this.set({ status, activeBand: null, bands: status === 'signedout' ? [] : this.state.bands, members: [], pending: store.pending.size })
   }
 

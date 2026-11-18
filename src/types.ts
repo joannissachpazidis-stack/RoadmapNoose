@@ -154,6 +154,7 @@ export type ContactType =
   | 'fotograf'
   | 'label'
   | 'booking'
+  | 'kandidat'
   | 'sonstiges'
 
 export interface Contact extends Base {
@@ -217,6 +218,38 @@ export interface Settings extends Base {
   seeded: boolean
   monthlyFee: number | null
   profileVersion?: number
+  coachMode?: CoachMode
+}
+
+export type CoachMode = 'auto' | 'manual' | 'off'
+
+export interface CoachQuestion {
+  id: string
+  text: string
+  options: string[]
+}
+
+export interface CoachSuggestion {
+  id: string
+  kind: 'goal' | 'task'
+  title: string
+  detail: string
+  why: string
+  area: Area
+  phaseId: string
+  goalId: string
+  appliedAt?: number
+}
+
+export interface CoachMessage extends Base {
+  role: 'user' | 'coach' | 'event'
+  text: string
+  author: string
+  at: number
+  questions?: CoachQuestion[]
+  suggestions?: CoachSuggestion[]
+  answered?: string[] // IDs beantworteter Fragen
+  model?: string
 }
 
 export interface CollectionMap {
@@ -233,6 +266,7 @@ export interface CollectionMap {
   content: ContentPost
   checklist: ChecklistItem
   settings: Settings
+  coach: CoachMessage
 }
 
 export type CollectionName = keyof CollectionMap

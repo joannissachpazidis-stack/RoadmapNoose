@@ -1,4 +1,5 @@
 import {
+  Bot,
   CalendarDays,
   Cloud,
   CloudOff,
@@ -20,9 +21,11 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { cx } from './components/ui'
 import { PROFILE_VERSION, applyBandProfile, seedInitialData } from './lib/roadmap'
 import { go, useRoute, type Route } from './lib/router'
-import { store, useSettings, useStoreVersion } from './lib/store'
+import { store, useCollection, useSettings, useStoreVersion } from './lib/store'
 import { useSync } from './lib/sync'
+import { coach } from './lib/coach'
 import Calendar from './pages/Calendar'
+import CoachPage from './pages/Coach'
 import Contacts from './pages/Contacts'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
@@ -39,8 +42,9 @@ const NAV: { route: Route; label: string; icon: ReactNode; mobile?: boolean }[] 
   { route: 'dashboard', label: 'Übersicht', icon: <LayoutDashboard size={18} />, mobile: true },
   { route: 'roadmap', label: 'Roadmap', icon: <Flag size={18} />, mobile: true },
   { route: 'songs', label: 'Songwriting', icon: <Music size={18} />, mobile: true },
+  { route: 'coach', label: 'Coach', icon: <Bot size={18} />, mobile: true },
   { route: 'releases', label: 'Releases', icon: <Disc3 size={18} /> },
-  { route: 'live', label: 'Live & Gigs', icon: <Mic2 size={18} />, mobile: true },
+  { route: 'live', label: 'Live & Gigs', icon: <Mic2 size={18} /> },
   { route: 'kalender', label: 'Kalender', icon: <CalendarDays size={18} /> },
   { route: 'promo', label: 'Promo & EPK', icon: <Megaphone size={18} /> },
   { route: 'merch', label: 'Merch', icon: <Shirt size={18} /> },
@@ -75,17 +79,19 @@ export default function App() {
   const settings = useSettings()
   const sync = useSync()
   const [menu, setMenu] = useState(false)
+  const coachMsgs = useCollection('coach')
+  const unread = route === 'coach' ? 0 : coachMsgs.filter((m) => m.role === 'coach' && m.at > coach.lastSeen()).length
 
   // Erststart im lokalen Modus: Start-Roadmap anlegen
   useEffect(() => {
-    if (store.scope === 'local' && !store.hasData()) seedInitialData()
+    if (store.scope === 'local' && !store.hasData()) store.mute(() => seedInitialData())
   }, [])
 
   // Bestehende Daten einmalig an das Band-Profil anpassen (erst wenn Daten geladen sind)
   const version = useStoreVersion()
   useEffect(() => {
     const s = store.list('settings')[0]
-    if (s && (s.profileVersion ?? 0) < PROFILE_VERSION) applyBandProfile()
+    if (s && (s.profileVersion ?? 0) < PROFILE_VERSION) store.mute(() => applyBandProfile())
   }, [version])
 
   useEffect(() => setMenu(false), [route])
@@ -127,6 +133,9 @@ export default function App() {
     case 'einstellungen':
       page = <Settings />
       break
+    case 'coach':
+      page = <CoachPage />
+      break
     default:
       page = <Dashboard />
   }
@@ -141,6 +150,7 @@ export default function App() {
         >
           <span className={route === n.route ? 'text-accent' : ''}>{n.icon}</span>
           {n.label}
+          {n.route === 'coach' && unread > 0 && <span className="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-bold text-white">{unread}</span>}
         </a>
       ))}
     </nav>
@@ -189,9 +199,10 @@ export default function App() {
       {/* Bottom-Nav Mobil */}
       <nav className="pb-safe fixed bottom-0 left-0 right-0 z-30 flex border-t border-line bg-panel/95 backdrop-blur lg:hidden">
         {NAV.filter((n) => n.mobile).map((n) => (
-          <a key={n.route} href={'#/' + n.route} className={cx('flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px]', route === n.route ? 'text-accent' : 'text-zinc-500')}>
+          <a key={n.route} href={'#/' + n.route} className={cx('relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px]', route === n.route ? 'text-accent' : 'text-zinc-500')}>
             {n.icon}
             {n.label}
+            {n.route === 'coach' && unread > 0 && <span className="absolute right-1/4 top-1 h-2 w-2 rounded-full bg-accent" />}
           </a>
         ))}
         <button onClick={() => setMenu(true)} className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] text-zinc-500">

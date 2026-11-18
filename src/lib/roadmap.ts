@@ -130,17 +130,21 @@ export const TEMPLATES: GoalTemplate[] = [
     id: 'besetzung-drums',
     phaseId: 'phase-fundament',
     area: 'fundament',
-    title: 'Drums live: Drummer:in suchen oder Track-Konzept festlegen',
-    description: 'Bewusst entscheiden, wie ihr live klingen wollt – und die Suche früh starten, denn sie dauert erfahrungsgemäß am längsten.',
-    why: 'Für Aufnahmen sind programmierte Drums im modernen Metalcore völlig üblich – live ist es die entscheidende Frage. Option A, Drummer:in (fest oder als Session-Musiker:in): mehr Energie und Glaubwürdigkeit; Veranstalter, Contests und Publikum erwarten meist eine komplette Band, und Backing-Tracks werden in der Szene teils kritisch gesehen. Die Suche dauert oft Monate – deshalb jetzt parallel zum Songwriting starten. Option B, Drums vom Track: machbar, wirkt aber auf kleinen Bühnen oft schwächer und macht euch komplett vom Click abhängig. Electronics, Synths und 808s kommen bei eurem Sound ohnehin vom Track – das ist szeneüblich und unabhängig von dieser Entscheidung.',
+    title: 'Feste:n Drummer:in finden',
+    description: 'Eine Person, die musikalisch und menschlich passt – und Lust auf euren Weg (Singles, Live, Region Stuttgart und darüber hinaus) hat.',
+    why: 'Ihr habt euch für eine feste Besetzung entschieden – gut so: Live wirkt eine komplette Band deutlich stärker, und Veranstalter, Contests und Publikum erwarten sie. Die Suche dauert erfahrungsgemäß Monate, deshalb parallel zum Songwriting starten. Je konkreter euer Angebot (Demos, Genre, Ziele, Proben im eigenen Studio), desto passender die Bewerbungen. Bei Modern Metalcore mit Electronics ist Click-Sicherheit Pflicht – das sollte das Probespiel zeigen. Und: Erst eine Probezeit vereinbaren, dann in den Bandvertrag aufnehmen.',
     tasks: [
-      'Gemeinsam entscheiden: feste:r Drummer:in, Session-Drummer:in oder Drums vom Track',
-      'Gesuchtes Profil beschreiben (Stil, Click-Erfahrung, Verfügbarkeit, Ziele)',
-      'Suchaufruf posten: Social Media, Musikerbörsen, Aushänge, Kontakte aus der Stuttgarter Szene',
-      'Probespiel-Paket vorbereiten: 2–3 Songs als Demo + Version ohne Drums + Click',
-      'Probespiele im Studio durchführen',
+      'Profil festlegen: Stil (Modern Metalcore, Blasts/Grooves/Breakdowns), Click/In-Ear-Erfahrung, Verfügbarkeit (Mittwochs + Proben), Ziele',
+      'Probespiel-Paket: 2–3 Songs als Demo, Versionen ohne Drums, Click-Tracks, Drum-MIDI/Noten',
+      'Suchaufruf als Kurzvideo/Post mit Demo-Snippet (Instagram, TikTok, Facebook-Musikergruppen)',
+      'Musikerbörsen, Aushänge in Proberäumen/Musikgeschäften, Musikschulen in der Region',
+      'In der Stuttgarter Core-Szene herumfragen (Shows im Club Zentral, JuHa West, andere Bands)',
+      'Kandidat:innen im Bereich "Kontakte" als "Drummer-Kandidat:in" erfassen',
+      'Probespiele im Studio (inkl. gemeinsames Gespräch über Ziele & Zeitaufwand)',
+      'Probezeit vereinbaren, danach in den Bandvertrag aufnehmen',
     ],
     when: () => true,
+    metric: (c) => ({ value: c.contactsOfType('kandidat'), target: 5, label: 'Kandidat:innen kontaktiert' }),
     priority: 1,
     seed: true,
     focus: true,
@@ -281,7 +285,6 @@ export const TEMPLATES: GoalTemplate[] = [
     metric: (c) => ({ value: c.songsWithVocals, target: Math.max(c.songsAtLeast('arrangement'), 1), label: 'Instrumentals mit Vocals' }),
     priority: 1,
     seed: true,
-    focus: true,
   },
   {
     id: 'mittwochs-session',
@@ -350,6 +353,7 @@ export const TEMPLATES: GoalTemplate[] = [
     when: () => true,
     priority: 1,
     seed: true,
+    focus: true,
   },
   {
     id: 'produktion',
@@ -768,7 +772,7 @@ export function releaseTimeline(type: ReleaseType): Omit<ReleaseTask, 'id' | 'do
 
 // ---------------- Start-Daten & Band-Profil ----------------
 
-export const PROFILE_VERSION = 2
+export const PROFILE_VERSION = 3
 
 const STUTTGART_CONTACTS: Partial<Contact>[] = [
   {
@@ -855,9 +859,9 @@ export function applyBandProfile() {
   // Mitglieder (nur wenn noch keine angelegt sind)
   if (!store.list('members').length) {
     store.putMany('members', [
-      { name: 'Gitarre', roles: 'Gitarre', responsibilities: '', color: '#dc2626' },
-      { name: 'Bass', roles: 'Bass', responsibilities: '', color: '#3b82f6' },
-      { name: 'Gesang', roles: 'Vocals (Screams, Cleans, Rap)', responsibilities: '', color: '#eab308' },
+      { name: 'Janni', roles: 'Gesang (Screams, Cleans, Rap)', responsibilities: '', color: '#eab308' },
+      { name: 'Chris', roles: 'Bass', responsibilities: '', color: '#3b82f6' },
+      { name: 'Kevin', roles: 'Gitarre', responsibilities: '', color: '#dc2626' },
     ])
   }
 
@@ -883,8 +887,32 @@ export function applyBandProfile() {
     STUTTGART_CONTACTS.filter((c) => !contacts.some((x) => x.name === c.name)).map((c) => ({ email: '', phone: '', web: '', lastContact: '', ...c })),
   )
 
+  // v3: Namen der Mitglieder, Drummer-Suche, Pop-Stipendium im Fokus
+  const names: Record<string, { name: string; roles: string }> = {
+    Gesang: { name: 'Janni', roles: 'Gesang (Screams, Cleans, Rap)' },
+    Bass: { name: 'Chris', roles: 'Bass' },
+    Gitarre: { name: 'Kevin', roles: 'Gitarre' },
+  }
+  store.putMany(
+    'members',
+    store
+      .list('members')
+      .filter((m) => names[m.name])
+      .map((m) => ({ id: m.id, ...names[m.name] })),
+  )
+  const drums = store.list('goals').find((g) => g.templateId === 'besetzung-drums')
+  if (drums && drums.status !== 'erledigt' && !drums.tasks.some((t) => t.done)) {
+    const t = TEMPLATE_BY_ID['besetzung-drums']
+    store.put('goals', { ...goalFromTemplate(t, true), id: drums.id, status: drums.status === 'offen' ? 'aktiv' : drums.status, ownerIds: drums.ownerIds, due: drums.due })
+  }
+  const stip = store.list('goals').find((g) => g.templateId === 'popstipendium')
+  if (stip && !stip.focus && stip.status !== 'erledigt') store.put('goals', { id: stip.id, focus: true })
+  const vp = store.list('goals').find((g) => g.templateId === 'vocal-pipeline')
+  if (vp && vp.focus && vp.status === 'offen') store.put('goals', { id: vp.id, focus: false })
+
   store.put('settings', {
     id: 'settings',
+    coachMode: settings?.coachMode ?? 'auto',
     genre: settings?.genre || 'Modern Metalcore × Electronic × Trap/Rap',
     hometown: settings?.hometown || 'Region Stuttgart',
     profileVersion: PROFILE_VERSION,

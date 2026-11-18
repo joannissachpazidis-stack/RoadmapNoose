@@ -107,6 +107,7 @@ export const CONTACT_TYPES: Record<ContactType, string> = {
   fotograf: 'Foto / Video',
   label: 'Label',
   booking: 'Booking-Agentur',
+  kandidat: 'Drummer-Kandidat:in',
   sonstiges: 'Sonstiges',
 }
 

@@ -135,7 +135,7 @@ function BandSetup() {
             onClick={() =>
               run(async () => {
                 await sync.createBand(name.trim(), takeLocal && localHasData)
-                if (!(takeLocal && localHasData)) seedInitialData(name.trim())
+                if (!(takeLocal && localHasData)) store.mute(() => seedInitialData(name.trim()))
                 else store.put('settings', { id: 'settings', bandName: name.trim() })
               })
             }
@@ -273,7 +273,12 @@ export default function Settings() {
         <Card>
           <div className="mb-3 font-semibold">Dein Name</div>
           <div className="flex gap-2">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Wie sollen dich die anderen sehen?" />
+            <Input list="member-names" value={name} onChange={(e) => setName(e.target.value)} placeholder="Wie sollen dich die anderen sehen?" />
+            <datalist id="member-names">
+              {store.list('members').map((m) => (
+                <option key={m.id} value={m.name} />
+              ))}
+            </datalist>
             <Button variant="primary" disabled={!name.trim() || name === s.displayName} onClick={() => sync.setDisplayName(name.trim())}>
               Speichern
             </Button>
