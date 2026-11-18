@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/beautiful-noether-7o9xxh]
   workflow_dispatch:
 
 permissions:

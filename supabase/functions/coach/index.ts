@@ -6,8 +6,9 @@
 //
 // Secrets (Supabase → Edge Functions → Secrets):
 //   ANTHROPIC_API_KEY   (Pflicht)  API-Key von platform.claude.com
-//   COACH_MODEL         (optional) Standard: claude-opus-5-5 – günstiger z.B. claude-haiku-5-5
-//   COACH_EFFORT        (optional) low | medium | high – Standard: medium
+//   COACH_MODEL         (optional) Modell für den Chat-Coach, Standard: claude-haiku-5-5 (sehr günstig)
+//   MANAGER_MODEL       (optional) Modell für das Manager-Briefing mit Websuche, Standard: claude-sonnet-5-5
+//   COACH_EFFORT / MANAGER_EFFORT (optional) low | medium | high – Standard: medium
 //   COACH_MAX_PER_HOUR  (optional) Kostenbremse: max. Coach-Antworten pro Band und Stunde (Standard 20)
 //   CRON_SECRET         (für das Mittwochs-Briefing) frei gewähltes Passwort, das auch im Cron-Job steht
 //   MANAGER_MAX_PER_DAY (optional) max. Briefings/Recherchen pro Band und Tag (Standard 3)
@@ -324,15 +325,17 @@ async function saveCoachMessage(db: DB, bandId: string, data: Data) {
   if (error) throw new Error('Antwort konnte nicht gespeichert werden: ' + error.message)
 }
 
-function modelOptions() {
-  const model = Deno.env.get('COACH_MODEL') || 'claude-opus-5-5'
-  const effort = (Deno.env.get('COACH_EFFORT') || 'medium') as 'low' | 'medium' | 'high'
+// Modellwahl (Kosten/Qualität): Chat-Coach günstig mit Haiku, Manager-Recherche gründlicher mit Sonnet.
+// Beides per Secret änderbar, z.B. COACH_MODEL=claude-sonnet-5-5 oder MANAGER_MODEL=claude-opus-5-5.
+function modelOptions(role: 'coach' | 'manager') {
+  const model = role === 'coach' ? Deno.env.get('COACH_MODEL') || 'claude-haiku-5-5' : Deno.env.get('MANAGER_MODEL') || 'claude-sonnet-5-5'
+  const effort = ((role === 'coach' ? Deno.env.get('COACH_EFFORT') : Deno.env.get('MANAGER_EFFORT')) || 'medium') as 'low' | 'medium' | 'high'
   const fallback = FALLBACK_MODELS.includes(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}
   return { model, effort, fallback }
 }
 
 async function runBriefing(anthropic: Anthropic, db: DB, bandId: string, rows: Row[], topic: string) {
-  const { model, effort, fallback } = modelOptions()
+  const { model, effort, fallback } = modelOptions('manager')
   const today = new Date().toISOString().slice(0, 10)
   const coachRows = rows.filter((r) => r.collection === 'coach').map((r) => r.data)
   const previous = coachRows
@@ -355,12 +358,15 @@ ${prevText}
 ${topic ? `Recherche-Auftrag der Band: ${topic}\nKonzentriere dich darauf, nimm aber wichtige Fristen aus den anderen Bereichen mit, falls sie bald ablaufen.` : 'Erstelle das Manager-Briefing für die nächsten 1–2 Wochen: Chancen, auf die sich die Band jetzt bewerben oder eingehen sollte, und Neuigkeiten, die sie betreffen.'}`
 
   // Schritt 1: Recherche mit Websuche (pause_turn fortsetzen)
-  const webSearch: Anthropic.Beta.BetaWebSearchTool20260209 = {
-    type: 'web_search_20260209',
-    name: 'web_search',
+  const searchOpts = {
+    name: 'web_search' as const,
     max_uses: Number(Deno.env.get('MANAGER_MAX_SEARCHES') ?? 8),
-    user_location: { type: 'approximate', city: 'Stuttgart', region: 'Baden-Württemberg', country: 'DE', timezone: 'Europe/Berlin' },
+    user_location: { type: 'approximate' as const, city: 'Stuttgart', region: 'Baden-Württemberg', country: 'DE', timezone: 'Europe/Berlin' },
   }
+  // Haiku unterstützt nur die Basis-Variante der Websuche, die anderen Modelle die neuere mit dynamischer Filterung
+  const webSearch: Anthropic.Beta.BetaWebSearchTool20260209 | Anthropic.Beta.BetaWebSearchTool20250305 = model.startsWith('claude-haiku')
+    ? { type: 'web_search_20250305', ...searchOpts }
+    : { type: 'web_search_20260209', ...searchOpts }
   const assistantContent: Anthropic.Beta.BetaContentBlockParam[] = []
   let research: Anthropic.Beta.BetaMessage | null = null
   for (let i = 0; i < 4; i++) {
@@ -504,7 +510,7 @@ Deno.serve(async (req) => {
       content: `[Aktueller Stand der App]\n${buildSnapshot(rows.filter((r) => r.collection !== 'coach'), today)}\n\n[Aufgabe]\n${TRIGGER_TEXT[trigger] ?? TRIGGER_TEXT.events}`,
     })
 
-    const { model, effort, fallback } = modelOptions()
+    const { model, effort, fallback } = modelOptions('coach')
     const response = await anthropic.beta.messages.parse({
       model,
       max_tokens: 16000,

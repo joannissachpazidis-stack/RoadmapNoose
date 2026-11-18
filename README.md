@@ -94,25 +94,32 @@ Funde ohne bestätigte Quelle werden markiert: Ein Link wird nur angezeigt, wenn
    - `ANTHROPIC_API_KEY` = euer Key (Pflicht)
    - `CRON_SECRET` = ein selbst ausgedachtes langes Passwort (für das Mittwochs-Briefing)
    - Optional:
-     - `COACH_MODEL` (Standard `claude-opus-5-5`, günstiger `claude-haiku-5-5`)
-     - `COACH_EFFORT` (`low` / `medium` / `high`, Standard `medium`)
+     - `COACH_MODEL` (Standard `claude-haiku-5-5`)
+     - `MANAGER_MODEL` (Standard `claude-sonnet-5-5`)
+     - `COACH_EFFORT` / `MANAGER_EFFORT` (`low` / `medium` / `high`, Standard `medium`)
      - `COACH_MAX_PER_HOUR` (Standard 20)
      - `MANAGER_MAX_PER_DAY` (Standard 3)
      - `MANAGER_MAX_SEARCHES` (Websuchen pro Briefing, Standard 8)
 4. **Mittwochs-Zeitplan:** [`supabase/manager-cron.sql`](supabase/manager-cron.sql) öffnen, die zwei Platzhalter (`<PROJEKT-REF>`, `<CRON_SECRET>`) ersetzen und im **SQL Editor** ausführen. Der Job läuft jeden Mittwoch um 16:00 Uhr (Sommerzeit 17:00), also vor eurer Session. Den Takt (wöchentlich oder alle 2 Wochen) stellt ihr in der App ein.
 5. **Testen:** In der App → **Coach & Manager** → „Gesamteinschätzung holen“ und im Tab „Manager“ → „Briefing jetzt holen“ (dauert 1–3 Minuten).
 
-**Kosten (grobe Schätzung, mit `claude-opus-5-5` zu $4 / $20 pro Million Tokens):**
-- **Coach-Antwort:** etwa 5.000–15.000 Eingabe- und 1.000–2.000 Ausgabe-Tokens, also ca. 3–10 Cent. Bei etwa 5 Antworten am Tag sind das grob 5–15 € im Monat.
-- **Manager-Briefing:** bis zu 8 Websuchen ($10 pro 1.000 Suchen, also bis zu 8 Cent), dazu die gelesenen Suchergebnisse als Eingabe-Tokens und die Aufbereitung. Zusammen etwa 25–60 Cent pro Briefing, also grob 1–3 € im Monat.
-- **Günstiger:** Mit `claude-haiku-5-5` ($0,10 / $0,50) kostet beides nur einen Bruchteil, die Antworten sind dann aber weniger tiefgründig.
-- **Kostenbremsen:** Stunden- und Tageslimits und der 10-Minuten-Abstand. Die tatsächlichen Kosten seht ihr in der Claude-Console.
+**Modelle & Kosten (grobe Schätzung):** Voreingestellt ist eine sparsame Kombination:
+- **Chat-Coach: `claude-haiku-5-5`** ($0,10 / $0,50 pro Million Tokens). Er reagiert kurz auf eure Einträge, dafür reicht Haiku. Eine Antwort kostet etwa 0,2 Cent, auch bei viel Nutzung bleibt es unter 1 € im Monat.
+- **Manager-Briefing: `claude-sonnet-5-5`** ($2 / $10). Hier muss im Web recherchiert und abgewogen werden, ob eine Chance zu euch passt. Ein Briefing kostet etwa 15–30 Cent inklusive bis zu 8 Websuchen ($10 pro 1.000 Suchen). Alle 2 Wochen sind das etwa 0,50 € im Monat.
+
+Zusammen also voraussichtlich **1–2 € im Monat**. Wenn euch die Antworten zu oberflächlich sind, stellt ihr per Secret auf ein stärkeres Modell um:
+- `COACH_MODEL=claude-sonnet-5-5` (etwa 3–7 € im Monat)
+- `MANAGER_MODEL=claude-opus-5-5` (etwa 25–60 Cent pro Briefing)
+
+Kostenbremsen sind die Stunden- und Tageslimits und der 10-Minuten-Abstand. Die tatsächlichen Kosten seht ihr in der Claude-Console.
 
 **Datenschutz:** An Anthropic geht nur der Text-Stand eurer App, also Ziele, Songs ohne Lyrics, Termine, Kontakte mit Namen und Notizen sowie der Coach-Verlauf. Tragt keine sensiblen Daten Dritter in Notizen ein.
 
 ## Veröffentlichen (GitHub Pages)
 
 Der Workflow `.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie.
+
+Der Workflow veröffentlicht bei jedem Push auf `main` oder den aktuellen Standard-Branch des Repositorys.
 
 1. Im Repository **Settings → Pages → Source: GitHub Actions** wählen.
 2. *Optional:* **Settings → Secrets and variables → Actions → Variables** anlegen:
