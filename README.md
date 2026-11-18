@@ -117,9 +117,7 @@ Kostenbremsen sind die Stunden- und Tageslimits und der 10-Minuten-Abstand. Die 
 
 ## Veröffentlichen (GitHub Pages)
 
-Der Workflow `.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie.
-
-Der Workflow veröffentlicht bei jedem Push auf `main` oder den aktuellen Standard-Branch des Repositorys.
+Der Workflow `.github/workflows/deploy.yml` baut und veröffentlicht die App bei jedem Push auf `main` oder auf den aktuellen Standard-Branch des Repositorys.
 
 1. Im Repository **Settings → Pages → Source: GitHub Actions** wählen.
 2. *Optional:* **Settings → Secrets and variables → Actions → Variables** anlegen:
