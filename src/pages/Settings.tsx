@@ -4,7 +4,7 @@ import { Button, Card, Checkbox, Field, Input, PageHeader, Select } from '../com
 import { timeAgo } from '../lib/format'
 import { seedInitialData } from '../lib/roadmap'
 import { store } from '../lib/store'
-import { sync, useSync } from '../lib/sync'
+import { sync, usesBuiltinConfig, useSync } from '../lib/sync'
 
 function Msg({ text, error }: { text: string; error?: boolean }) {
   if (!text) return null
@@ -15,6 +15,19 @@ function SupabaseSetup() {
   const cfg = sync.getConfig()
   const [url, setUrl] = useState(cfg?.url ?? '')
   const [key, setKey] = useState(cfg?.anonKey ?? '')
+  const [custom, setCustom] = useState(false)
+  if (usesBuiltinConfig() && !custom)
+    return (
+      <Card>
+        <div className="mb-1 font-semibold">1. Datenbank</div>
+        <p className="text-sm text-muted">
+          ✓ Die App ist fest mit eurer Band-Datenbank verbunden. Einfach unten registrieren bzw. einloggen.{' '}
+          <button className="underline" onClick={() => setCustom(true)}>
+            Andere Datenbank verwenden
+          </button>
+        </p>
+      </Card>
+    )
   return (
     <Card>
       <div className="mb-1 font-semibold">1. Supabase verbinden</div>

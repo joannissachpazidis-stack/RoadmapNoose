@@ -1,6 +1,7 @@
 // Synchronisation mit Supabase: Login, Bands, Pull/Push und Realtime-Updates.
 import { createClient, type RealtimeChannel, type Session, type SupabaseClient } from '@supabase/supabase-js'
 import { useSyncExternalStore } from 'react'
+import { BUILTIN_SUPABASE } from '../config'
 import { seedInitialData } from './roadmap'
 import { store, type Rec } from './store'
 
@@ -61,7 +62,13 @@ function readConfig(): SupabaseConfig | null {
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
   if (url && anonKey) return { url, anonKey }
+  if (BUILTIN_SUPABASE.url && BUILTIN_SUPABASE.anonKey) return { ...BUILTIN_SUPABASE }
   return null
+}
+
+/** true, wenn die fest eingebaute Band-Datenbank verwendet wird */
+export function usesBuiltinConfig() {
+  return !localStorage.getItem(CFG_KEY) && readConfig()?.url === BUILTIN_SUPABASE.url
 }
 
 const toRec = (r: RemoteRow): Rec => ({
