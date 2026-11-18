@@ -2,6 +2,16 @@
 
 Eine interaktive Roadmap-App für Metal-Bands: Ziele, Songwriting-Pipeline, Releases, Gigs, Promo, Merch, Bandkasse und Organisation an einem Ort, synchron für alle Bandmitglieder. Sie läuft im Browser auf PC und Handy und lässt sich auf dem Homescreen installieren (PWA).
 
+## Auf eure Band zugeschnitten
+
+Die Start-Roadmap passt zu eurem aktuellen Stand: Trio (Gitarre, Bass, Gesang) ohne festen Drummer, Modern Metalcore mit Electronic- und Trap/Rap-Einflüssen, Region Stuttgart, eigenes Studio, Songwriting jeden Mittwoch, 5–7 weitgehend fertige Instrumentals, Ziel 9–10 Songs vor Probenphase und Live.
+
+- **Fokus-Ziele:** 9–10 Songs komplett mit Vocals · Vocal-Pipeline · Entscheidung „Drums live“ (Drummer:in vs. Tracks)
+- **Phasen:** Fundament → Songwriting & Pre-Production → Debüt-Singles (parallel) → Live-Set & Bühne → Wachstum. Die Reihenfolge lässt sich pro Phase ändern.
+- **Region Stuttgart:** Pop-Stipendium des Pop-Büros Region Stuttgart, Kontakte (Pop-Büro, Club Zentral mit „Region's Finest“, JuHa West, clubCANN), Förderungen in Baden-Württemberg
+- **Genre:** Song-Bausteine wie Electronics, Breakdowns, Screams, Cleans und Rap-Parts, jeweils auch als „nicht nötig“ markierbar. Dazu Live-Rig für Backing-Tracks und Click, Content-Routine mit Kurzvideos
+- **Mittwochs-Session** als wiederkehrender Kalendertermin, einzelne Termine lassen sich absagen
+
 ## Bereiche
 
 | Bereich | Wofür |

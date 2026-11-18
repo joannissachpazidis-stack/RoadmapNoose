@@ -37,7 +37,7 @@ function SetlistEditor({ value, onChange, slot }: { value: string[]; onChange: (
               <div className="flex items-center gap-2 rounded border border-line bg-panel2 px-2 py-1 text-sm">
                 <span className="w-5 text-right text-xs text-muted">{i + 1}</span>
                 <span className="flex-1">{s?.title ?? '(gelöscht)'}</span>
-                {s && !stageAtLeast(s.stage, 'probereif') && <span className="text-[10px] text-yellow-500">noch nicht probe-reif</span>}
+                {s && !stageAtLeast(s.stage, 'probereif') && <span className="text-[10px] text-yellow-500">noch nicht live-ready</span>}
                 <span className="text-xs text-muted">{fmtDuration(s?.durationSec)}</span>
                 <button disabled={i === 0} onClick={() => move(i, -1)} className="text-muted disabled:opacity-20" aria-label="hoch">
                   <ArrowUp size={14} />
@@ -184,7 +184,7 @@ export function GigModal({ gig, onClose }: { gig: Partial<Gig>; onClose: () => v
             <div className="space-y-2 rounded-md border border-green-900 bg-green-950/30 p-3 text-sm">
               <label className="flex gap-2">
                 <input type="checkbox" className="accent-red-600" checked={promoteSongs} onChange={(e) => setPromoteSongs(e.target.checked)} />
-                Probe-reife Songs der Setlist auf "Live erprobt" setzen
+                Live-ready Songs der Setlist auf "Live erprobt" setzen
               </label>
               <label className="flex gap-2">
                 <input type="checkbox" className="accent-red-600" checked={bookFee} onChange={(e) => setBookFee(e.target.checked)} />

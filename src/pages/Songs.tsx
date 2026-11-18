@@ -1,10 +1,10 @@
 import { ChevronLeft, ChevronRight, Columns3, List, Music, Plus, Star, Timer, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Badge, Button, Card, Checkbox, Empty, Field, Input, Modal, NumberInput, PageHeader, Progress, Select, Tabs, Textarea, confirmDelete, cx } from '../components/ui'
-import { READINESS, SONG_PARTS, SONG_STAGES, STAGE_INDEX, TUNINGS, stageAtLeast } from '../lib/constants'
+import { READINESS, SONG_PARTS, SONG_STAGES, STAGE_INDEX, TUNINGS, hasVocals, partsProgress, stageAtLeast } from '../lib/constants'
 import { fmtDuration, parseDuration, timeAgo } from '../lib/format'
 import { store, useCollection } from '../lib/store'
-import type { Song, SongStage } from '../types'
+import type { PartState, Song, SongStage } from '../types'
 
 export function newSong(stage: SongStage = 'idee'): Partial<Song> {
   return {
@@ -57,7 +57,7 @@ function Stars({ value, onChange }: { value: number; onChange?: (v: number) => v
 }
 
 function SongCard({ song, memberIds, onOpen, draggable }: { song: Song; memberIds: string[]; onOpen: () => void; draggable?: boolean }) {
-  const parts = SONG_PARTS.filter((p) => song.parts?.[p.key]).length
+  const pp = partsProgress(song.parts)
   const r = readinessScore(song, memberIds)
   return (
     <div
@@ -75,11 +75,12 @@ function SongCard({ song, memberIds, onOpen, draggable }: { song: Song; memberId
         {song.bpm && <span>{song.bpm} BPM</span>}
         {song.durationSec && <span>{fmtDuration(song.durationSec)}</span>}
         {song.click && <span className="text-green-500">Click ✓</span>}
+        {hasVocals(song.parts) && <span className="text-yellow-500">Vocals ✓</span>}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <Progress value={parts} max={SONG_PARTS.length} className="h-1" color="#a16207" />
+        <Progress value={pp.done} max={pp.total} className="h-1" color="#a16207" />
         <span className="text-[10px] text-zinc-500">
-          {parts}/{SONG_PARTS.length}
+          {pp.done}/{pp.total}
         </span>
       </div>
       {r !== null && stageAtLeast(song.stage, 'arrangement') && (
@@ -205,12 +206,37 @@ export function SongModal({ song, onClose }: { song: Partial<Song>; onClose: () 
             <Checkbox checked={!!s.click} onChange={(v) => set({ click: v })} label="Sitzt zum Click / Metronom" />
           </div>
           <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Bausteine</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SONG_PARTS.map((p) => (
-                <Checkbox key={p.key} checked={!!s.parts?.[p.key]} onChange={(v) => set({ parts: { ...s.parts, [p.key]: v } })} label={p.label} />
-              ))}
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">Bausteine</span>
+              <span className="text-[11px] text-zinc-500">Tippen: offen → fertig ✓ → nicht nötig – (z.B. kein Rap-Part)</span>
             </div>
+            {(['Instrumental', 'Vocals', 'Finish'] as const).map((grp) => (
+              <div key={grp} className="mb-2">
+                <div className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">{grp}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SONG_PARTS.filter((p) => p.group === grp).map((p) => {
+                    const v = s.parts?.[p.key]
+                    const next: PartState = v === true ? 'na' : v === 'na' ? false : true
+                    return (
+                      <button
+                        type="button"
+                        key={p.key}
+                        onClick={() => set({ parts: { ...s.parts, [p.key]: next } })}
+                        className={cx(
+                          'rounded-full border px-2.5 py-1 text-xs',
+                          v === true && 'border-green-700 bg-green-900/40 text-green-300',
+                          v === 'na' && 'border-line text-zinc-600 line-through',
+                          !v && 'border-line text-zinc-300',
+                        )}
+                      >
+                        {v === true ? '✓ ' : v === 'na' ? '– ' : ''}
+                        {p.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           <Field label="Links (Demos, Tabs, Guitar Pro, Dropbox …)" hint="Eine URL pro Zeile">
             <Textarea value={s.links ?? ''} onChange={(e) => set({ links: e.target.value })} placeholder="https://…" />
@@ -303,6 +329,7 @@ export default function Songs({ param }: { param?: string }) {
   const visibleStages = SONG_STAGES.filter((s) => showArchive || s.key !== 'archiv')
   const active = songs.filter((s) => s.stage !== 'archiv')
   const ready = active.filter((s) => stageAtLeast(s.stage, 'probereif'))
+  const withVocals = active.filter((s) => stageAtLeast(s.stage, 'demo') || hasVocals(s.parts)).length
   const setMinutes = Math.round(ready.reduce((a, s) => a + (s.durationSec ?? 240), 0) / 60)
   const estimated = ready.some((s) => !s.durationSec)
 
@@ -339,8 +366,11 @@ export default function Songs({ param }: { param?: string }) {
           <div className="text-2xl font-bold">{active.length}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-[11px] uppercase tracking-wider text-muted">Bühnenreif</div>
-          <div className="text-2xl font-bold text-green-500">{ready.length}</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted">Mit Vocals · Ziel 10</div>
+          <div className="text-2xl font-bold text-yellow-500">
+            {withVocals}
+            <span className="text-sm font-normal text-muted"> · {ready.length} live-ready</span>
+          </div>
         </Card>
         <Card className="p-3">
           <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted">
@@ -422,7 +452,7 @@ export default function Songs({ param }: { param?: string }) {
             .sort((a, b) => STAGE_INDEX[b.stage] - STAGE_INDEX[a.stage] || a.title.localeCompare(b.title))
             .map((s) => {
               const st = stageMeta(s.stage)
-              const parts = SONG_PARTS.filter((p) => s.parts?.[p.key]).length
+              const pp = partsProgress(s.parts)
               const r = readinessScore(s, memberIds)
               return (
                 <Card key={s.id} onClick={() => setEdit(s)} className="flex flex-wrap items-center gap-3 p-3">
@@ -437,8 +467,8 @@ export default function Songs({ param }: { param?: string }) {
                   </div>
                   <Badge color={st.color}>{st.label}</Badge>
                   <div className="w-24 text-[11px] text-muted">
-                    Bausteine {parts}/{SONG_PARTS.length}
-                    <Progress value={parts} max={SONG_PARTS.length} className="mt-0.5 h-1" color="#a16207" />
+                    Bausteine {pp.done}/{pp.total}
+                    <Progress value={pp.done} max={pp.total} className="mt-0.5 h-1" color="#a16207" />
                   </div>
                   {r !== null && (
                     <div className="w-24 text-[11px] text-muted">

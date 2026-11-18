@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, Lightbulb, Sta
 import { useState } from 'react'
 import GoalModal from '../components/GoalModal'
 import { Button, Card, PageHeader, Progress, SectionTitle, Stat } from '../components/ui'
-import { SONG_STAGES, stageAtLeast } from '../lib/constants'
+import { SONG_STAGES, hasVocals, stageAtLeast } from '../lib/constants'
 import { daysUntil, fmtDate, fmtMoney, relDays, todayISO } from '../lib/format'
 import { go } from '../lib/router'
 import { useCollection, useSettings } from '../lib/store'
@@ -27,12 +27,24 @@ export default function Dashboard() {
 
   const focus = goals.filter((g) => g.focus && g.status !== 'erledigt')
   const overdue = goals.filter((g) => g.due && g.status !== 'erledigt' && g.status !== 'pausiert' && (daysUntil(g.due) ?? 0) < 0)
-  const upcoming = items.filter((i) => i.date >= today && (daysUntil(i.date) ?? 99) <= 30).slice(0, 7)
+  const seenSeries = new Set<string>()
+  const upcoming = items
+    .filter((i) => i.date >= today && (daysUntil(i.date) ?? 99) <= 30)
+    .filter((i) => {
+      // Serientermine (z.B. Mittwochs-Session) nur einmal zeigen
+      if (!i.label.endsWith('Serie')) return true
+      if (seenSeries.has(i.title)) return false
+      seenSeries.add(i.title)
+      return true
+    })
+    .slice(0, 7)
   const active = songs.filter((s) => s.stage !== 'archiv')
   const ready = active.filter((s) => stageAtLeast(s.stage, 'probereif')).length
+  const withVocals = active.filter((s) => stageAtLeast(s.stage, 'demo') || hasVocals(s.parts)).length
   const balance = txs.reduce((a, t) => a + t.amount, 0)
   const played = gigs.filter((g) => g.status === 'gespielt').length
   const nextGig = gigs.filter((g) => g.status === 'bestaetigt' && g.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0]
+  const placeholderNames = members.some((m) => ['Gitarre', 'Bass', 'Gesang'].includes(m.name))
   const reviewDue = Date.now() - (settings?.lastReview ?? 0) > 28 * 86400000
 
   // aktuelle Phase = erste Phase mit offenen Zielen
@@ -45,23 +57,31 @@ export default function Dashboard() {
         subtitle={currentPhase ? <>Ihr seid gerade in der Phase <span className="font-semibold text-white">„{currentPhase.title}“</span>. {currentPhase.description}</> : undefined}
       />
 
-      {(!members.length || (sync.status === 'local' && !sync.configured)) && (
+      {(!members.length || placeholderNames || !songs.length || (sync.status === 'local' && !sync.configured)) && (
         <Card className="mb-5 border-accent/50">
           <div className="font-semibold">Los geht's 🤘</div>
           <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-zinc-300">
-            {!members.length && (
+            {(!members.length || placeholderNames) && (
               <li>
                 <a className="text-accent2 underline" href="#/orga">
-                  Bandmitglieder anlegen
+                  Eure Namen bei den Mitgliedern eintragen
                 </a>{' '}
                 und Zuständigkeiten verteilen
               </li>
             )}
+            {!songs.length && (
+              <li>
+                <a className="text-accent2 underline" href="#/songs">
+                  Eure 5–7 Instrumentals und alle Ideen erfassen
+                </a>{' '}
+                – fertige Instrumentals ins Stadium „Instrumental steht“
+              </li>
+            )}
             <li>
-              <a className="text-accent2 underline" href="#/songs">
-                Alle Songs & Ideen erfassen
+              <a className="text-accent2 underline" href="#/kalender">
+                Uhrzeit der Mittwochs-Session
               </a>{' '}
-              – mit ihrem aktuellen Stadium
+              im Kalender ergänzen
             </li>
             <li>
               <a className="text-accent2 underline" href="#/roadmap">
@@ -95,7 +115,7 @@ export default function Dashboard() {
       )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Songs bühnenreif" value={`${ready}/${active.length}`} sub="probe-reif oder weiter" onClick={() => go('songs')} />
+        <Stat label="Songs mit Vocals" value={`${withVocals}/10`} sub={`${active.length} Songs & Ideen · ${ready} live-ready`} onClick={() => go('songs')} />
         <Stat label="Gigs gespielt" value={played} sub={nextGig ? `Nächster: ${fmtDate(nextGig.date)}` : 'kein Gig bestätigt'} onClick={() => go('live')} />
         <Stat label="Bandkasse" value={fmtMoney(balance)} onClick={() => go('kasse')} />
         <Stat label="Ziele erledigt" value={`${goals.filter((g) => g.status === 'erledigt').length}/${goals.length}`} onClick={() => go('roadmap')} />

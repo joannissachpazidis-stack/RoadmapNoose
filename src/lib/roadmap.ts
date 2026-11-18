@@ -1,7 +1,10 @@
 // Roadmap-Wissen: Phasen, Ziel-Vorlagen mit Begründung und Bedingungen,
-// sowie die Start-Daten für eine Band, die noch nichts veröffentlicht hat.
-import type { Area, ChecklistItem, CollectionMap, Goal, Phase, ReleaseTask, ReleaseType } from '../types'
-import { stageAtLeast } from './constants'
+// sowie die Start-Daten – zugeschnitten auf euer Band-Profil:
+// Trio (Gitarre, Bass, Gesang) ohne festen Drummer, Modern Metalcore mit Electronic- und Trap/Rap-Einflüssen,
+// Region Stuttgart, eigenes Studio, wöchentliche Songwriting-Session am Mittwoch,
+// 5–7 weitgehend fertige Instrumentals, Ziel: 9–10 Songs vor Probenphase & Live.
+import type { Area, ChecklistItem, CollectionMap, Contact, Goal, Phase, ReleaseTask, ReleaseType } from '../types'
+import { hasVocals, stageAtLeast } from './constants'
 import { store, uid } from './store'
 
 export const PHASES: (Omit<Phase, 'id'> & { id: string })[] = [
@@ -9,44 +12,53 @@ export const PHASES: (Omit<Phase, 'id'> & { id: string })[] = [
     id: 'phase-fundament',
     order: 1,
     title: 'Fundament',
-    horizon: '0–3 Monate',
-    description: 'Wer seid ihr, wie arbeitet ihr zusammen? Regeln, Rollen, Name, Identität – damit später nichts an Organisation oder Streit scheitert.',
+    horizon: 'jetzt – 3 Monate',
+    description: 'Regeln, Rollen, Name, Identität – und die Besetzungsfrage (Drums). Läuft parallel zum Songwriting, damit später nichts an Organisation oder Streit scheitert.',
   },
   {
     id: 'phase-songs',
     order: 2,
-    title: 'Songs & Live-Set',
-    horizon: '0–6 Monate',
-    description: 'Songs zur Bühnenreife bringen und ein sicheres 30-Minuten-Set aufbauen. Qualität vor Masse.',
-  },
-  {
-    id: 'phase-buehne',
-    order: 3,
-    title: 'Bühne & Netzwerk',
-    horizon: '3–9 Monate',
-    description: 'Erste Gigs, Songs live testen, Kontakte zu Venues, Veranstaltern und anderen Bands aufbauen.',
+    title: 'Songwriting & Pre-Production',
+    horizon: 'jetzt – ca. 6 Monate',
+    description: 'Von 5–7 Instrumentals zu 9–10 kompletten Songs mit Vocals als Pre-Production-Demo. Die Mittwochs-Sessions im Studio sind euer Motor.',
   },
   {
     id: 'phase-release',
+    order: 3,
+    title: 'Debüt-Singles',
+    horizon: 'ca. 3–9 Monate (parallel)',
+    description: 'Empfehlung: Die stärksten Songs schon während des Songwritings als Singles veröffentlichen. So habt ihr vor den ersten Gigs Musik draußen, ein erstes Publikum – und etwas, das Veranstalter und potenzielle Drummer:innen anhören können.',
+  },
+  {
+    id: 'phase-buehne',
     order: 4,
-    title: 'Debüt-Release',
-    horizon: '6–12 Monate',
-    description: 'Die stärksten (live erprobten) Songs aufnehmen und mit einer geplanten Kampagne veröffentlichen.',
+    title: 'Live-Set & Bühne',
+    horizon: 'ca. 6–12 Monate',
+    description: 'Probenphase mit Live-Setup (Drums, Backing-Tracks, Click), ein 35–45-Minuten-Set und die ersten Shows in der Region Stuttgart.',
   },
   {
     id: 'phase-wachstum',
     order: 5,
     title: 'Reichweite & Wachstum',
     horizon: '12+ Monate',
-    description: 'Regionale Shows, Merch, Festivals, Contests, Förderung – und das nächste, größere Release.',
+    description: 'Shows außerhalb der Region, Merch, Festivals, Förderung – und das nächste, größere Release (EP/Album).',
   },
 ]
+
+const OLD_PHASE_TITLES: Record<string, string> = {
+  'phase-fundament': 'Fundament',
+  'phase-songs': 'Songs & Live-Set',
+  'phase-buehne': 'Bühne & Netzwerk',
+  'phase-release': 'Debüt-Release',
+  'phase-wachstum': 'Reichweite & Wachstum',
+}
 
 export interface Ctx {
   songsTotal: number
   songsAtLeast: (stage: Parameters<typeof stageAtLeast>[1]) => number
   songsWithClick: number
   songsWithMeta: number
+  songsWithVocals: number
   gigsPlayed: number
   gigsUpcoming: number
   citiesPlayed: number
@@ -71,8 +83,9 @@ export function buildCtx(): Ctx {
   return {
     songsTotal: active.length,
     songsAtLeast: (stage) => active.filter((s) => stageAtLeast(s.stage, stage)).length,
-    songsWithClick: active.filter((s) => s.click && stageAtLeast(s.stage, 'probereif')).length,
+    songsWithClick: active.filter((s) => s.click && stageAtLeast(s.stage, 'arrangement')).length,
     songsWithMeta: active.filter((s) => s.bpm && s.tuning && s.durationSec).length,
+    songsWithVocals: active.filter((s) => stageAtLeast(s.stage, 'demo') || hasVocals(s.parts)).length,
     gigsPlayed: played.length,
     gigsUpcoming: gigs.filter((g) => (g.status === 'bestaetigt' || g.status === 'angefragt') && g.date >= today).length,
     citiesPlayed: new Set(played.map((g) => g.city.trim().toLowerCase()).filter(Boolean)).size,
@@ -114,34 +127,52 @@ const started = (c: Ctx, id: string) => {
 export const TEMPLATES: GoalTemplate[] = [
   // ---------------- Fundament ----------------
   {
+    id: 'besetzung-drums',
+    phaseId: 'phase-fundament',
+    area: 'fundament',
+    title: 'Drums live: Drummer:in suchen oder Track-Konzept festlegen',
+    description: 'Bewusst entscheiden, wie ihr live klingen wollt – und die Suche früh starten, denn sie dauert erfahrungsgemäß am längsten.',
+    why: 'Für Aufnahmen sind programmierte Drums im modernen Metalcore völlig üblich – live ist es die entscheidende Frage. Option A, Drummer:in (fest oder als Session-Musiker:in): mehr Energie und Glaubwürdigkeit; Veranstalter, Contests und Publikum erwarten meist eine komplette Band, und Backing-Tracks werden in der Szene teils kritisch gesehen. Die Suche dauert oft Monate – deshalb jetzt parallel zum Songwriting starten. Option B, Drums vom Track: machbar, wirkt aber auf kleinen Bühnen oft schwächer und macht euch komplett vom Click abhängig. Electronics, Synths und 808s kommen bei eurem Sound ohnehin vom Track – das ist szeneüblich und unabhängig von dieser Entscheidung.',
+    tasks: [
+      'Gemeinsam entscheiden: feste:r Drummer:in, Session-Drummer:in oder Drums vom Track',
+      'Gesuchtes Profil beschreiben (Stil, Click-Erfahrung, Verfügbarkeit, Ziele)',
+      'Suchaufruf posten: Social Media, Musikerbörsen, Aushänge, Kontakte aus der Stuttgarter Szene',
+      'Probespiel-Paket vorbereiten: 2–3 Songs als Demo + Version ohne Drums + Click',
+      'Probespiele im Studio durchführen',
+    ],
+    when: () => true,
+    priority: 1,
+    seed: true,
+    focus: true,
+  },
+  {
     id: 'bandvertrag',
     phaseId: 'phase-fundament',
     area: 'business',
     title: 'Band-Vereinbarung (GbR) schriftlich festhalten',
     description: 'Die wichtigsten Regeln eurer Zusammenarbeit auf 1–2 Seiten festhalten und von allen unterschreiben lassen.',
-    why: 'Sobald ihr gemeinsam z.B. einen Proberaum mietet, eine Bandkasse führt oder Gigs spielt, seid ihr rechtlich in der Regel eine GbR. Ohne Vertrag gelten die gesetzlichen Regeln (u.a. gleiche Anteile, gemeinsame Haftung). Klare Absprachen jetzt verhindern Streit, wenn später Geld, Namensrechte oder ein Ausstieg Thema werden. Für komplexere Fälle lohnt sich ein kurzer Check durch eine Fachanwältin/einen Fachanwalt.',
+    why: 'Sobald ihr gemeinsam z.B. Equipment anschafft, eine Bandkasse führt oder Gigs spielt, seid ihr rechtlich in der Regel eine GbR. Ohne Vertrag gelten die gesetzlichen Regeln (u.a. gleiche Anteile, gemeinsame Haftung). Bei euch besonders wichtig: Das Studio gehört einem Mitglied – haltet fest, was es die Band kostet bzw. wie die Nutzung geregelt ist, und wie ein später dazukommendes Mitglied (z.B. Drums) beteiligt wird. Für komplexere Fälle lohnt ein kurzer Check durch eine Fachanwältin/einen Fachanwalt.',
     tasks: [
       'Verteilung von Einnahmen und Kosten festlegen',
-      'Bandkasse & Mitgliedsbeiträge regeln',
+      'Studio-Nutzung regeln (Kosten, Equipment, Zeiten)',
       'Wem gehört welches Equipment? (privat vs. Band)',
       'Regel für Songwriting-Credits / GEMA-Anteile festlegen',
+      'Wie werden neue Mitglieder beteiligt? (z.B. Drummer:in)',
       'Rechte an Bandname & Logo bei Ausstieg klären',
-      'Ein- und Ausstieg von Mitgliedern regeln',
-      'Wie werden Entscheidungen getroffen? (Mehrheit / einstimmig)',
+      'Wie werden Entscheidungen getroffen?',
       'Von allen unterschreiben lassen',
     ],
     when: () => true,
-    priority: 2,
+    priority: 3,
     seed: true,
-    focus: true,
   },
   {
     id: 'bandkasse',
     phaseId: 'phase-fundament',
     area: 'finanzen',
     title: 'Bandkasse & monatlichen Beitrag einführen',
-    description: 'Ein gemeinsames Budget für Proberaum, Aufnahmen, Merch und Promo – planbar statt spontan.',
-    why: 'Recording, Artwork, Fotos und die erste Merch-Auflage kosten schnell vierstellig. Ein fester Beitrag (z.B. Proberaummiete + Rücklage) baut das Budget für das Debüt-Release auf, ohne dass vorher jemand privat in Vorleistung gehen muss.',
+    description: 'Ein gemeinsames Budget für Mix/Master, Artwork, Videos, Promo und später Merch.',
+    why: 'Auch mit eigenem Studio kosten Release-Qualität (externer Mix/Master, Artwork, Fotos, Musikvideo, Werbung) schnell vierstellig. Ein fester Beitrag baut das Budget für die Debüt-Singles auf, ohne dass jemand privat in Vorleistung gehen muss.',
     tasks: ['Monatlichen Beitrag festlegen', 'Konto oder Unterkonto für die Band einrichten', 'Kassenwart:in bestimmen', 'Alle Einnahmen & Ausgaben im Bereich "Bandkasse" erfassen'],
     when: () => true,
     priority: 3,
@@ -152,9 +183,9 @@ export const TEMPLATES: GoalTemplate[] = [
     phaseId: 'phase-fundament',
     area: 'fundament',
     title: 'Aufgaben & Verantwortlichkeiten verteilen',
-    description: 'Jede:r übernimmt einen Bereich: z.B. Booking, Social Media, Kasse, Merch, Technik, Termine.',
-    why: 'In Bands bleibt die Organisation sonst an ein bis zwei Personen hängen – das bremst und frustriert. Feste Zuständigkeiten plus ein kurzes, regelmäßiges Band-Meeting sorgen dafür, dass die Roadmap tatsächlich vorankommt.',
-    tasks: ['Bereiche definieren', 'Zuständigkeiten bei den Mitgliedern eintragen', 'Monatliches Band-Meeting (30–45 Min.) mit Roadmap-Check festlegen'],
+    description: 'Bei drei Leuten übernimmt jede:r zwei bis drei Bereiche: z.B. Produktion/Studio, Social Media/Content, Booking/Netzwerk, Kasse, Grafik.',
+    why: 'In Bands bleibt die Organisation sonst an ein bis zwei Personen hängen – das bremst und frustriert. Feste Zuständigkeiten plus 15 Minuten Orga am Ende der Mittwochs-Session sorgen dafür, dass die Roadmap tatsächlich vorankommt.',
+    tasks: ['Bereiche definieren', 'Zuständigkeiten bei den Mitgliedern eintragen', 'Einmal im Monat den Roadmap-Check in der Mittwochs-Session machen'],
     when: () => true,
     priority: 3,
     seed: true,
@@ -165,10 +196,9 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'business',
     title: 'Bandnamen prüfen & Accounts sichern',
     description: 'Sicherstellen, dass euer Name nicht schon vergeben ist, und überall denselben Handle reservieren.',
-    why: 'Gleichnamige Bands führen zu Verwechslungen auf Spotify (falsches Künstlerprofil!), in Suchmaschinen und im schlimmsten Fall zu rechtlichen Problemen. Je früher geprüft, desto billiger ist eine Umbenennung.',
+    why: 'Gleichnamige Bands führen zu Verwechslungen auf Spotify (falsches Künstlerprofil!), in Suchmaschinen und im schlimmsten Fall zu rechtlichen Problemen. Je früher geprüft, desto billiger ist eine Umbenennung – spätestens vor der ersten Single.',
     tasks: [
-      'Encyclopaedia Metallum (metal-archives.com) durchsuchen',
-      'Spotify, Bandcamp, YouTube, Instagram durchsuchen',
+      'Encyclopaedia Metallum, Spotify, Bandcamp, YouTube, Instagram, TikTok durchsuchen',
       'Markenregister prüfen (DPMAregister / EUIPO)',
       'Einheitlichen Handle auf Instagram, TikTok, YouTube sichern',
       'Domain und Band-E-Mail-Adresse anlegen',
@@ -183,8 +213,14 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'promo',
     title: 'Sound & Identität definieren',
     description: 'In wenigen Sätzen beschreiben können, wer ihr seid, wie ihr klingt und wofür ihr steht.',
-    why: 'Veranstalter, Presse und Fans brauchen eine schnelle Einordnung: Subgenre, Referenzbands ("für Fans von …"), Themen, Ästhetik. Diese Basis steuert Logo, Fotos, Bio, Booking-Ziele und welche Bands ihr als Partner ansprecht.',
-    tasks: ['Subgenre in einem Satz beschreiben', '3–5 Referenzbands festlegen ("für Fans von …")', 'Lyrische Themen sammeln', 'Visuelle Ästhetik / Moodboard (Farben, Bildsprache)', 'Kurz-Bio (3 Sätze) schreiben'],
+    why: 'Modern Metalcore ist ein dichtes Feld – eure Mischung aus Metalcore, Electronic und Trap/Rap ist genau das, was euch unterscheiden kann. Wer das klar benennt (und visuell umsetzt), wird schneller eingeordnet: von Veranstaltern, Playlists, Presse und Fans. Die Identität steuert Logo, Artwork, Fotos, Videos und Bio.',
+    tasks: [
+      'Euren Genre-Mix in einem Satz beschreiben ("Modern Metalcore trifft …")',
+      '3–5 Referenzbands festlegen ("für Fans von …")',
+      'Lyrische Themen & Haltung sammeln',
+      'Visuelle Ästhetik / Moodboard (Farben, Bildsprache, Typo)',
+      'Kurz-Bio (3 Sätze) schreiben',
+    ],
     when: () => true,
     priority: 3,
     seed: true,
@@ -195,8 +231,8 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'promo',
     title: 'Logo & visuelle Basis erstellen',
     description: 'Ein Signature-Logo plus eine gut lesbare Variante – in allen nötigen Formaten.',
-    why: 'Metal-Logos sind Erkennungszeichen und fast immer das erste Merch-Motiv. Auf Plakaten und Line-ups muss euer Name aber lesbar sein – deshalb lohnt sich zusätzlich eine klare Schrift-Variante. Vektorformate sparen später Ärger mit Druckereien.',
-    tasks: ['Briefing für Designer:in (Referenzen, Moodboard)', 'Signature-Logo', 'Lesbare Schrift-Variante', 'Vektorformate (SVG/PDF) + PNG transparent', 'Einfarbige Versionen (Schwarz/Weiß) für Merch'],
+    why: 'Das Logo ist euer Erkennungszeichen auf Covern, Social Media und später fast immer das erste Merch-Motiv. Im modernen Metalcore sind klare, grafische Logos üblich – wichtig ist, dass es auch klein (Profilbild, Spotify) und auf Plakaten funktioniert.',
+    tasks: ['Briefing für Designer:in (Referenzen, Moodboard)', 'Logo + lesbare Variante', 'Vektorformate (SVG/PDF) + PNG transparent', 'Einfarbige Versionen für Merch', 'Profilbild-Version (quadratisch, klein lesbar)'],
     when: (c) => started(c, 'identitaet'),
     trigger: () => 'Eure Identität ist in Arbeit – jetzt kann das Logo darauf aufbauen.',
     priority: 4,
@@ -205,36 +241,56 @@ export const TEMPLATES: GoalTemplate[] = [
     id: 'equipment',
     phaseId: 'phase-fundament',
     area: 'business',
-    title: 'Equipment-Inventar & Versicherung prüfen',
+    title: 'Studio- & Equipment-Inventar und Versicherung prüfen',
     description: 'Liste aller Instrumente und Geräte mit Seriennummer und Wert; Versicherungsschutz klären.',
-    why: 'Proberaum-Einbrüche und Diebstähle bei Gigs kommen leider vor. Viele Hausratversicherungen decken Instrumente außerhalb der Wohnung nicht ab. Eine Liste mit Seriennummern und Fotos hilft bei Polizei und Versicherung.',
-    tasks: ['Inventarliste mit Seriennummern & Neuwert', 'Fotos von allem', 'Versicherungsschutz prüfen (Hausrat / Instrumentenversicherung)'],
+    why: 'Mit einem eigenen Studio steckt viel Wert an einem Ort. Viele Hausratversicherungen decken gewerblich genutztes oder mitgenommenes Equipment (Gigs!) nicht ab. Eine Liste mit Seriennummern und Fotos hilft bei Diebstahl oder Schaden.',
+    tasks: ['Inventarliste mit Seriennummern & Neuwert', 'Fotos von allem', 'Versicherungsschutz prüfen (Hausrat / Instrumentenversicherung, auch unterwegs)'],
     when: () => true,
     priority: 8,
   },
-  // ---------------- Songs ----------------
+  // ---------------- Songwriting & Pre-Production ----------------
   {
-    id: 'songs-6',
+    id: 'songs-10',
     phaseId: 'phase-songs',
     area: 'songwriting',
-    title: '6–8 Songs auf Probe-Reife bringen',
-    description: 'Genug sichere Songs für ein erstes 30-Minuten-Set.',
-    why: 'Typische Opener- und Support-Slots dauern 25–40 Minuten. Mit 6–8 Songs, die jede:r sicher spielt, könnt ihr erste Gig-Angebote annehmen. Lieber wenige Songs wirklich fertig als viele halbfertig – nutzt die Song-Pipeline, um Engpässe zu erkennen.',
+    title: '9–10 Songs komplett mit Vocals (Pre-Prod-Demo)',
+    description: 'Jeder Song als Pre-Production-Demo mit Lyrics und Vocals – Grundlage für Song-Auswahl, Proben und Set.',
+    why: 'Mit 9–10 kompletten Songs habt ihr genug für ein 35–45-Minuten-Set und könnt die stärksten für die Singles auswählen. Eure Instrumentals sind schon weit – der Engpass liegt jetzt erfahrungsgemäß bei Lyrics und Vocals. Deshalb zählt hier erst ein Song mit Vocals als "fertig". Den finalen Feinschliff macht ihr wie geplant im Recording und in den Proben.',
     tasks: [],
     when: () => true,
-    metric: (c) => ({ value: c.songsAtLeast('probereif'), target: 6, label: 'Songs probe-reif' }),
+    metric: (c) => ({ value: c.songsWithVocals, target: 10, label: 'Songs mit Vocals' }),
     priority: 1,
     seed: true,
     focus: true,
   },
   {
-    id: 'proberoutine',
+    id: 'vocal-pipeline',
     phaseId: 'phase-songs',
     area: 'songwriting',
-    title: 'Feste Proberoutine mit Ziel pro Probe',
-    description: 'Regelmäßiger Probetermin mit kurzer Agenda – und jede Probe wird mitgeschnitten.',
-    why: 'Strukturierte Proben bringen Songs deutlich schneller zur Reife als "einfach mal jammen". Bewährt: ein Song wird neu erarbeitet, ein Song wird feingeschliffen, am Ende das Set am Stück. Handy-Mitschnitte zeigen, was wirklich funktioniert.',
-    tasks: ['Festen Probetag festlegen', 'Proben im Kalender eintragen', 'Agenda pro Probe (vorher in der Band-Gruppe teilen)', 'Jede Probe per Handy/Recorder mitschneiden'],
+    title: 'Vocal-Pipeline: Lyrics & Vocals für alle Instrumentals',
+    description: 'Feste Vocal-Zeit pro Woche, pro Song Screams, Cleans und Rap-Parts planen.',
+    why: 'Bei einer Person am Mikro und mehreren fertigen Instrumentals entsteht schnell ein Stau. Plant Vocals deshalb aktiv ein, statt sie "am Ende" zu machen: z.B. jede Mittwochs-Session mit 45–60 Minuten Vocal-Arbeit, oder abwechselnd Instrumental- und Vocal-Sessions. Eure Mischung aus Screams, Cleans und Rap braucht pro Song eine klare Rollenverteilung der Parts. Bei vielen Scream- und Rap-Sessions ist Stimmgesundheit (Technik, Einsingen, Pausen) ein echter Faktor.',
+    tasks: [
+      'Für jedes Instrumental Thema/Konzept festlegen',
+      'Pro Song Vocal-Fahrplan: wo Screams, Cleans/Hook, Rap-Parts?',
+      'Feste Vocal-Zeit in der Mittwochs-Session (oder eigene Vocal-Sessions)',
+      'Scratch-Vocals aufnehmen und gemeinsam anhören',
+      'Stimm-Routine: Einsingen, Technik (ggf. Vocal-Coaching), Pausen',
+    ],
+    when: () => true,
+    metric: (c) => ({ value: c.songsWithVocals, target: Math.max(c.songsAtLeast('arrangement'), 1), label: 'Instrumentals mit Vocals' }),
+    priority: 1,
+    seed: true,
+    focus: true,
+  },
+  {
+    id: 'mittwochs-session',
+    phaseId: 'phase-songs',
+    area: 'songwriting',
+    title: 'Mittwochs-Session mit fester Agenda',
+    description: 'Eure wöchentliche Studio-Session mit klarer Struktur – und jede Session endet mit einem Bounce.',
+    why: 'Regelmäßigkeit habt ihr schon – mit einer festen Agenda wird jede Session messbar produktiv. Bewährt: 1 Song Feinschliff Instrumental, 1 Song Vocals, 15 Minuten Orga/Roadmap. Ein Bounce nach jeder Session (in der Song-Karte verlinkt) macht Fortschritt sichtbar und ist gleichzeitig Content-Material.',
+    tasks: ['Mittwoch als Serie im Kalender (ist angelegt – Uhrzeit ergänzen)', 'Agenda-Vorlage festlegen und vorab in der Band-Gruppe teilen', 'Nach jeder Session: Bounce in Song-Karte verlinken, Stadium aktualisieren', '1–2 kurze Clips pro Session für Social Media filmen'],
     when: () => true,
     priority: 2,
     seed: true,
@@ -243,37 +299,25 @@ export const TEMPLATES: GoalTemplate[] = [
     id: 'songwriting-pipeline',
     phaseId: 'phase-songs',
     area: 'songwriting',
-    title: 'Song-Pipeline füllen (10+ Songs/Ideen)',
-    description: 'Regelmäßige Songwriting-Sessions, damit immer neues Material nachkommt.',
-    why: 'Für Set und Debüt braucht ihr mehr Material, als ihr am Ende veröffentlicht – die stärksten Songs setzen sich durch. Ideen (Riffs, Memos) sofort in der App erfassen, damit nichts verloren geht.',
-    tasks: ['Alle vorhandenen Riffs/Memos als Songs/Ideen erfassen', 'Feste Songwriting-Session (z.B. alle 2 Wochen)', 'Ideen regelmäßig sichten und 1–2 zum Ausarbeiten auswählen'],
-    when: (c) => c.songsTotal < 10,
-    metric: (c) => ({ value: c.songsTotal, target: 10, label: 'Songs & Ideen' }),
+    title: 'Song-Pipeline auf 12+ Ideen auffüllen',
+    description: 'Mehr Ideen als nötig – damit ihr am Ende die besten 9–10 auswählen könnt.',
+    why: 'Wer genau 10 Songs schreibt, muss alle 10 nehmen. Ein paar zusätzliche Riffs/Ideen in der Pipeline geben euch die Freiheit, schwächere Songs zu streichen. Ideen (Riffs, Memos, Beats) sofort in der App erfassen.',
+    tasks: ['Alle vorhandenen Riffs/Memos/Beats als Ideen erfassen', 'Ideen regelmäßig sichten und 1–2 zum Ausarbeiten auswählen'],
+    when: (c) => c.songsTotal < 12,
+    metric: (c) => ({ value: c.songsTotal, target: 12, label: 'Songs & Ideen' }),
     trigger: (c) => `Aktuell ${c.songsTotal} Songs/Ideen in der Pipeline.`,
-    priority: 4,
-  },
-  {
-    id: 'demos',
-    phaseId: 'phase-songs',
-    area: 'songwriting',
-    title: 'Proberaum-Demos aller Songs aufnehmen',
-    description: 'Von jedem Song eine brauchbare Aufnahme, auf die alle zugreifen können.',
-    why: 'Mitschnitte zeigen Schwächen in Arrangement und Timing, die man beim Spielen nicht hört. Sie sind die Basis für Lyrics- und Vocal-Arbeit, für Feedback von außen und für erste Booking-Anfragen.',
-    tasks: ['Recorder (z.B. Zoom) oder Interface organisieren', 'Demo-Link in jeder Song-Karte hinterlegen', 'Gemeinsame Hör-Session mit Notizen pro Song'],
-    when: (c) => c.songsAtLeast('skizze') >= 3,
-    trigger: (c) => `${c.songsAtLeast('skizze')} Songs sind mindestens skizziert.`,
-    priority: 3,
+    priority: 5,
   },
   {
     id: 'click',
     phaseId: 'phase-songs',
     area: 'songwriting',
-    title: 'Songs zum Click / Metronom proben',
-    description: 'Alle probe-reifen Songs mindestens einmal komplett zum Click spielen können.',
-    why: 'Im Studio wird im Metal fast immer zum Click aufgenommen – Bands, die das vorher nicht geübt haben, verlieren dort teure Studiozeit. Live braucht ihr den Click, sobald Intros, Samples oder Backing-Tracks dazukommen. Nebeneffekt: Tempi werden stabil.',
-    tasks: ['BPM für jeden Song festlegen', 'Click-Lösung für den Proberaum (Drummer-Kopfhörer)', 'Song für Song zum Click festigen (in Song-Karte abhaken)'],
-    when: (c) => c.songsAtLeast('probereif') >= 3,
-    metric: (c) => ({ value: c.songsWithClick, target: Math.max(c.songsAtLeast('probereif'), 1), label: 'probe-reife Songs mit Click' }),
+    title: 'Tempo-Maps & Click für jeden Song festlegen',
+    description: 'BPM/Tempowechsel, Taktarten und Click pro Song fix – Basis für Recording, Backing-Tracks und Drummer-Proben.',
+    why: 'Mit programmierten Drums und Electronics hängt bei euch alles am Grid: Recording, Backing-Tracks live und das Einarbeiten einer neuen Drummerin/eines neuen Drummers. Saubere Tempo-Maps (inkl. Tempowechsel) sparen später viel Arbeit beim Export von Stems und Click-Tracks.',
+    tasks: ['BPM und Tempowechsel je Song in der Song-Karte eintragen', 'Tempo-Map im DAW-Projekt sauber anlegen', 'In der Song-Karte "Sitzt zum Click" abhaken'],
+    when: (c) => c.songsAtLeast('arrangement') >= 3,
+    metric: (c) => ({ value: c.songsWithClick, target: Math.max(c.songsAtLeast('arrangement'), 1), label: 'Songs mit Click' }),
     priority: 4,
   },
   {
@@ -282,116 +326,69 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'songwriting',
     title: 'Tempo, Tuning & Länge jedes Songs dokumentieren',
     description: 'Für jeden Song BPM, Tuning und Dauer in der App eintragen.',
-    why: 'Setlist-Planung (Tuning-Wechsel = Gitarrenwechsel!), Slot-Längen, Click-Tracks und Studioplanung brauchen diese Daten. Spätestens beim Distributor (Länge) und bei der GEMA (Credits) müsst ihr sie ohnehin parat haben.',
+    why: 'Setlist-Planung (Tuning-Wechsel = Gitarrenwechsel!), Slot-Längen, Click-Tracks und Release-Metadaten brauchen diese Daten – und die App kann damit Set-Länge und Tuning-Wechsel automatisch berechnen.',
     tasks: [],
     when: (c) => c.songsAtLeast('arrangement') >= 2,
     metric: (c) => ({ value: c.songsWithMeta, target: Math.max(c.songsAtLeast('arrangement'), 1), label: 'Songs mit BPM/Tuning/Länge' }),
     priority: 6,
   },
-  // ---------------- Bühne ----------------
+  // ---------------- Debüt-Singles ----------------
   {
-    id: 'set-30',
-    phaseId: 'phase-buehne',
-    area: 'live',
-    title: '30-Minuten-Set zusammenstellen & durchproben',
-    description: 'Eine feste Setlist, die ihr am Stück und ohne Pausen sicher spielt.',
-    why: 'Ein Set ist mehr als die Summe der Songs: Übergänge, Ansagen, Tuning-Wechsel, Dramaturgie (starker Opener, stärkster Song am Ende) und Kondition. Wer das Set mehrfach am Stück geprobt hat, wirkt beim ersten Gig souverän.',
-    tasks: ['Setlist in einem Gig oder als Probe-Set anlegen', 'Dramaturgie: starker Opener, stärkster Song zum Schluss', 'Übergänge und Ansagen planen', 'Set 3× am Stück mit Stoppuhr durchspielen'],
-    when: (c) => c.songsAtLeast('probereif') >= 5,
-    trigger: (c) => `Ihr habt ${c.songsAtLeast('probereif')} probe-reife Songs – genug für ein erstes Set.`,
+    id: 'popstipendium',
+    phaseId: 'phase-release',
+    area: 'finanzen',
+    title: 'Pop-Stipendium des Pop-Büros Region Stuttgart prüfen',
+    description: 'Produktionsstipendium für noch nicht etablierte Bands aus der Region – passt genau zu eurem Debüt.',
+    why: 'Das Pop-Büro Region Stuttgart vergibt Produktionsstipendien (2026: je 5.000 €, dazu lobende Erwähnungen mit 2.000 €). Voraussetzung u.a.: Mindestens zwei Drittel der Bandmitglieder haben ihren Hauptwohnsitz in der Region (Stadt Stuttgart sowie Landkreise Böblingen, Esslingen, Göppingen, Ludwigsburg, Rems-Murr). In den Vorjahren startete die Bewerbungsphase Mitte November – also jetzt die aktuelle Ausschreibung und Frist auf popbuero.de prüfen. 5.000 € decken z.B. externen Mix/Master, Artwork und ein Video für mehrere Singles.',
+    tasks: [
+      'Aktuelle Ausschreibung & Frist auf popbuero.de prüfen und in den Kalender eintragen',
+      'Wohnsitz-Voraussetzung prüfen (2/3 der Mitglieder in der Region)',
+      'Beste 2–3 Demos für die Bewerbung auswählen',
+      'Projektbeschreibung & Kostenplan (Mix/Master, Artwork, Video, Promo) schreiben',
+      'Bewerbung über das Antragsportal einreichen',
+    ],
+    when: () => true,
+    priority: 1,
+    seed: true,
+  },
+  {
+    id: 'produktion',
+    phaseId: 'phase-release',
+    area: 'release',
+    title: 'Produktions-Setup klären: Was selbst, was extern?',
+    description: 'Entscheiden, welche Schritte ihr im eigenen Studio macht und wofür ihr Profis holt.',
+    why: 'Euer eigenes Studio ist ein großer Vorteil: Pre-Production, Gitarren/Bass (DI + Reamp), Vocals und Electronics könnt ihr ohne Zeitdruck selbst aufnehmen. Modern Metalcore ist aber sehr produktionsgetrieben – Hörer:innen vergleichen direkt mit Top-Produktionen. Ein externer Mix und/oder Master ist deshalb für die Singles oft das Geld wert. Programmierte Drums sollten professionell klingen (gute Library, Velocity/Humanizing) – oder ihr lasst sie von einem Studio-Drummer einspielen.',
+    tasks: [
+      '3–5 Referenz-Tracks für euren Sound festlegen',
+      'Entscheidung: Mix/Master intern oder extern',
+      'Bei Mix-Engineers anfragen, Probemix eines Songs vergleichen',
+      'Drum-Sound klären (Library/Programmierung vs. Studio-Drummer)',
+      'Kosten in der Bandkasse einplanen',
+    ],
+    when: (c) => c.songsAtLeast('arrangement') >= 3,
+    trigger: (c) => `${c.songsAtLeast('arrangement')} Songs haben mindestens ein fertiges Instrumental.`,
     priority: 2,
   },
-  {
-    id: 'erste-gigs',
-    phaseId: 'phase-buehne',
-    area: 'live',
-    title: 'Die ersten 3 Gigs spielen',
-    description: 'Realistische Einstiege: Support für lokale Bands, Jugendzentren, Metal-Kneipen, Open-Stage- und Bandnächte.',
-    why: 'Live-Erfahrung ist durch nichts zu ersetzen – und ihr lernt, welche Songs beim Publikum zünden. Genau das ist die beste Grundlage für die Auswahl eurer Debüt-Songs. Vorsicht bei "Pay-to-Play"-Angeboten (Ticketvorverkauf auf eigenes Risiko o.ä.) – die lohnen sich für neue Bands fast nie.',
-    tasks: ['10 lokale Venues/Veranstalter in den Kontakten sammeln', 'Kurze Anfrage-Mail mit Proberaum-Demo vorbereiten', 'Lokale Bands wegen Support/Gig-Tausch ansprechen', 'Freunde & Familie als erstes Publikum mobilisieren'],
-    when: (c) => c.songsAtLeast('probereif') >= 5 || started(c, 'set-30'),
-    metric: (c) => ({ value: c.gigsPlayed, target: 3, label: 'Gigs gespielt' }),
-    priority: 1,
-  },
-  {
-    id: 'netzwerk-bands',
-    phaseId: 'phase-buehne',
-    area: 'live',
-    title: 'Netzwerk mit 5 lokalen/regionalen Bands aufbauen',
-    description: 'Bands aus eurer Szene kennenlernen, auf ihre Shows gehen, gemeinsame Abende planen.',
-    why: 'Gig-Tausch ist der realistischste Weg für unbekannte Bands, auch außerhalb der Heimatstadt zu spielen: Ihr holt sie in eure Stadt, sie holen euch in ihre. Außerdem teilt man Backline, Kontakte und Publikum.',
-    tasks: ['Auf lokale Metal-Shows gehen und Kontakte knüpfen', 'Bands in den Kontakten erfassen', 'Einen gemeinsamen Abend organisieren'],
-    when: () => true,
-    metric: (c) => ({ value: c.contactsOfType('band'), target: 5, label: 'Band-Kontakte' }),
-    priority: 5,
-  },
-  {
-    id: 'stageplot',
-    phaseId: 'phase-buehne',
-    area: 'live',
-    title: 'Stage Plot & Technik-Rider erstellen',
-    description: 'Eine Seite mit Bühnenaufbau, Kanalliste und euren Anforderungen.',
-    why: 'Veranstalter und Tontechnik müssen vorab wissen, was ihr braucht (Kanäle, Monitore, was ihr an Backline teilen könnt). Bands, die das sauber liefern, sorgen für entspannte Soundchecks – und werden eher wieder gebucht. Die Live-Checkliste im Bereich "Live" hilft dabei.',
-    tasks: ['Stage Plot zeichnen (Positionen, Amps, Monitore)', 'Kanalliste (Input List)', 'Backline: was bringt ihr, was kann geteilt werden?', 'Als PDF im EPK ablegen'],
-    when: (c) => c.gigsUpcoming > 0 || c.gigsPlayed > 0 || started(c, 'erste-gigs'),
-    trigger: (c) => (c.gigsUpcoming ? `${c.gigsUpcoming} Gig(s) stehen an.` : ''),
-    priority: 3,
-  },
-  {
-    id: 'live-video',
-    phaseId: 'phase-buehne',
-    area: 'promo',
-    title: 'Ein gutes Live-Video aufnehmen',
-    description: 'Mindestens ein Song live mit ordentlichem Ton und mehreren Kamerawinkeln.',
-    why: 'Promoter und Festivals wollen sehen, wie ihr live wirkt – ein guter Live-Clip ist fürs Booking oft wichtiger als ein Studio-Song. Entscheidend ist der Ton: Pult-Mitschnitt oder separater Recorder statt Handy-Mikro.',
-    tasks: ['2–3 Kameras/Handys + Leute organisieren', 'Separate Tonaufnahme (Pult oder Recorder)', 'Einen Song schneiden und veröffentlichen'],
-    when: (c) => c.gigsPlayed >= 1 || c.gigsUpcoming >= 1,
-    priority: 3,
-  },
-  {
-    id: 'regional',
-    phaseId: 'phase-wachstum',
-    area: 'live',
-    title: 'In 3 verschiedenen Städten spielen',
-    description: 'Raus aus der Heimatstadt – über Gig-Tausch und regionale Veranstalter.',
-    why: 'Neue Städte bringen neues Publikum, neue Kontakte und zeigen Veranstaltern, dass ihr mehr seid als eine lokale Band. Das ist ein wichtiger Nachweis für Festivals und Booking-Agenturen.',
-    tasks: ['Partner-Bands aus anderen Städten ansprechen', 'Veranstalter in 2–3 Nachbarstädten anfragen', 'Fahrtkosten in der Kalkulation einplanen'],
-    when: (c) => c.gigsPlayed >= 3,
-    metric: (c) => ({ value: c.citiesPlayed, target: 3, label: 'Städte bespielt' }),
-    priority: 3,
-  },
-  // ---------------- Release ----------------
   {
     id: 'debut-plan',
     phaseId: 'phase-release',
     area: 'release',
-    title: 'Debüt-Release planen (Single oder EP)',
-    description: 'Format, Songs, Budget und Studio festlegen und das Release im Bereich "Releases" anlegen.',
-    why: 'Ohne Aufnahmen keine Playlists, keine Presse und kaum Booking außerhalb eurer Stadt. Für eine neue Band sind 1–2 Singles oder eine EP mit 3–5 Songs realistischer als ein Album: geringeres Budget, schneller fertig, mehrere Release-Momente. Nehmt die Songs, die live am besten funktionieren.',
-    tasks: ['Format entscheiden (Singles vs. EP)', 'Songs auswählen – welche zünden live?', 'Budget festlegen (Bandkasse!)', '2–3 Angebote von Studios/Produzent:innen einholen', 'Release im Bereich "Releases" anlegen'],
-    when: (c) => c.songsAtLeast('liveerprobt') >= 2 || c.songsAtLeast('probereif') >= 6,
-    trigger: (c) => `${c.songsAtLeast('liveerprobt')} live erprobte, ${c.songsAtLeast('probereif')} probe-reife Songs – genug Material für ein erstes Release.`,
-    priority: 2,
-  },
-  {
-    id: 'preproduction',
-    phaseId: 'phase-release',
-    area: 'release',
-    title: 'Pre-Production vor dem Studio',
-    description: 'Arrangements, Tempi, Tunings und Vocals final festzurren, bevor das Studio-Geld fließt.',
-    why: 'Im Studio kostet jede Stunde. Wer mit finalen Demos zum Click, festen Referenz-Tracks für den Sound und vorbereitetem Gear ankommt, nimmt schneller und besser auf. Referenz-Tracks geben Produzent, Mix und Master ein gemeinsames Ziel.',
-    tasks: ['Finale Demos zum Click', 'Referenz-Tracks für den Sound festlegen', 'Lyrics final & ausgedruckt', 'Gear-Check: Saiten, Felle, Setup/Intonation', 'Zeitplan mit dem Studio abstimmen'],
-    when: (c) => c.releasesPlanned > 0,
+    title: 'Single-Strategie planen: 2–3 Singles vor den ersten Gigs',
+    description: 'Die stärksten Songs auswählen, Release-Rhythmus festlegen, erste Single im Bereich "Releases" anlegen.',
+    why: 'Für modernen Metalcore mit Electronic-/Trap-Einflüssen funktioniert eine Single-Strategie besonders gut: alle 6–8 Wochen ein Song mit Video/Visualizer und Kurzvideo-Content hält euch dauerhaft sichtbar, statt alles auf einmal mit einer EP zu verbrauchen. 2–3 Singles vor den ersten Gigs geben Veranstaltern (z.B. für lokale Reihen) etwas zum Anhören, euren ersten Shows ein Publikum – und machen die Drummer-Suche leichter. Die Songs könnt ihr später auf einer EP/einem Album wiederverwenden.',
+    tasks: ['Die 2–3 stärksten Songs wählen (Hook, Wiedererkennung, euer Genre-Mix)', 'Release-Rhythmus festlegen (z.B. alle 6–8 Wochen)', 'Erste Single im Bereich "Releases" anlegen – der Zeitplan entsteht automatisch', 'Video-Idee pro Single (Musikvideo, Visualizer, Playthrough)'],
+    when: (c) => c.songsWithVocals >= 2 || c.songsAtLeast('arrangement') >= 5,
+    trigger: (c) => `${c.songsWithVocals} Songs mit Vocals, ${c.songsAtLeast('arrangement')} fertige Instrumentals.`,
     priority: 2,
   },
   {
     id: 'artwork-fotos',
     phaseId: 'phase-release',
     area: 'promo',
-    title: 'Artwork & Pressefotos',
-    description: 'Cover (mind. 3000×3000 px) und ein Set professioneller Bandfotos.',
-    why: 'Das Cover ist auf Bandcamp, Spotify und Merch euer Aushängeschild. Pressefotos (quer und hoch, hohe Auflösung, mit Fotocredit) brauchen Presse und Veranstalter für Ankündigungen – ohne sie wird oft gar nicht berichtet.',
-    tasks: ['Cover-Briefing & Artist beauftragen', 'Foto-Shooting planen (Kalender)', 'Fotos quer & hoch, mit Fotocredit', 'Dateien im EPK-Ordner ablegen'],
+    title: 'Artwork, Pressefotos & Video',
+    description: 'Cover pro Single (mind. 3000×3000 px), ein Set Bandfotos und ein Video-Konzept.',
+    why: 'Bei Singles zählt jedes Cover – eine wiedererkennbare Serie wirkt professioneller. Pressefotos (quer und hoch, hohe Auflösung, mit Fotocredit) brauchen Veranstalter und Medien. Im Genre ist Video zentral: Musikvideo, Visualizer oder Playthrough plus vertikale Kurzclips.',
+    tasks: ['Cover-Serie konzipieren & beauftragen', 'Foto-Shooting planen (Kalender)', 'Fotos quer & hoch, mit Fotocredit', 'Video-Konzept + Kurzclips (9:16) einplanen'],
     when: (c) => c.releasesPlanned > 0 || started(c, 'debut-plan'),
     priority: 3,
   },
@@ -401,8 +398,8 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'release',
     title: 'Vertrieb & Plattformen einrichten',
     description: 'Digitalvertrieb wählen, Bandcamp aufsetzen, Künstlerprofile beanspruchen.',
-    why: 'Ein Digitalvertrieb bringt euch auf Spotify, Apple Music & Co. (Gebührenmodelle vergleichen: Jahresabo vs. pro Release vs. Umsatzbeteiligung). Bandcamp betreibt ihr selbst – in der Metal-Szene ist es besonders wichtig für Direktverkäufe, Vinyl/Tapes und Merch. Nach dem ersten Upload Spotify for Artists beanspruchen, um pitchen zu können.',
-    tasks: ['Distributoren vergleichen und auswählen', 'Bandcamp-Seite einrichten', 'Spotify for Artists & Apple Music for Artists beanspruchen', 'ISRC-Codes in den Song-Karten notieren'],
+    why: 'Ein Digitalvertrieb bringt euch auf Spotify, Apple Music & Co. (Gebührenmodelle vergleichen: Jahresabo vs. pro Release vs. Umsatzbeteiligung – bei mehreren Singles lohnt sich oft ein Abo). Nach dem ersten Upload Spotify for Artists beanspruchen, um künftige Singles fürs Editorial pitchen zu können. Bandcamp für Direktverkauf und Fan-Bindung.',
+    tasks: ['Distributoren vergleichen und auswählen', 'Spotify for Artists & Apple Music for Artists beanspruchen', 'Bandcamp-Seite einrichten', 'ISRC-Codes in den Song-Karten notieren'],
     when: (c) => c.releasesPlanned > 0,
     priority: 3,
   },
@@ -412,34 +409,33 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'business',
     title: 'GEMA & GVL: Entscheidung treffen',
     description: 'Credits klären und abwägen, ob und wann eine Mitgliedschaft sinnvoll ist.',
-    why: 'Die GEMA vertritt Urheber:innen (Komposition & Text) – Ausschüttungen gibt es z.B. für Radio, Streams und Live-Auftritte (Setlisten einreichen!). Eine Mitgliedschaft hat aber Konsequenzen (u.a. Beiträge, alle Werke laufen über die GEMA). Wichtig: Autoren sind immer Personen, nicht "die Band" – klärt daher vorher die Anteile pro Song. Die GVL ist für ausübende Künstler:innen und wird ab Veröffentlichungen relevant.',
-    tasks: ['Credits/Anteile je Song in den Song-Karten festhalten', 'Vor- und Nachteile einer GEMA-Mitgliedschaft abwägen', 'Ggf. Mitgliedschaft beantragen & Werke anmelden', 'Nach Gigs Setlisten melden', 'GVL-Anmeldung nach dem ersten Release prüfen'],
+    why: 'Die GEMA vertritt Urheber:innen (Komposition & Text) – Ausschüttungen gibt es z.B. für Radio, Streams und Live-Auftritte (Setlisten einreichen!). Eine Mitgliedschaft hat aber Konsequenzen (u.a. Beiträge, alle Werke laufen über die GEMA). Wichtig: Autoren sind immer Personen, nicht "die Band" – klärt daher vorher die Anteile pro Song, auch für Beats/Electronics. Die GVL ist für ausübende Künstler:innen und wird ab Veröffentlichungen relevant.',
+    tasks: ['Credits/Anteile je Song in den Song-Karten festhalten', 'Vor- und Nachteile einer GEMA-Mitgliedschaft abwägen', 'Ggf. Mitgliedschaft beantragen & Werke anmelden', 'GVL-Anmeldung nach dem ersten Release prüfen'],
     when: (c) => c.releasesPlanned > 0 || c.gigsPlayed >= 3,
     priority: 5,
   },
-  // ---------------- Promo ----------------
   {
     id: 'social-routine',
-    phaseId: 'phase-buehne',
+    phaseId: 'phase-release',
     area: 'promo',
-    title: 'Social-Media-Routine (2–3 Posts pro Woche)',
-    description: 'Wenige Plattformen, feste Content-Säulen, klare Zuständigkeit.',
-    why: 'Kontinuität schlägt Perfektion. Behind-the-Scenes aus Proberaum und Studio, Riff-Snippets, Gear und Playthrough-Clips kosten wenig und bauen schon vor dem ersten Release ein Publikum auf – das dann am Release-Tag zuhört. Kurzvideos (Reels/Shorts/TikTok) bringen aktuell die meiste neue Reichweite.',
-    tasks: ['Plattformen festlegen (z.B. Instagram + YouTube Shorts/TikTok)', '3–4 Content-Säulen definieren', 'Content-Plan im Bereich "Promo" pflegen', 'Wöchentlich zuständige Person festlegen'],
-    when: (c) => started(c, 'name-check'),
-    trigger: () => 'Eure Handles sind (bald) gesichert – Zeit, sie zu füllen.',
-    priority: 4,
+    title: 'Content-Routine: 3 Kurzvideos pro Woche',
+    description: 'Reels/Shorts/TikTok aus Studio und Proben – lange vor der ersten Single.',
+    why: 'In eurem Genre kommt neue Reichweite vor allem über Kurzvideos. Ihr sitzt jeden Mittwoch im Studio – das ist laufend Material: Riff- und Breakdown-Snippets, Vocal-Takes, Beat-Building, Playthroughs, Before/After vom Mix. Wer vor der ersten Single schon postet, hat am Release-Tag Leute, die zuhören.',
+    tasks: ['Plattformen festlegen (Instagram Reels, TikTok, YouTube Shorts)', '3–4 Content-Säulen definieren', 'Pro Mittwochs-Session 2–3 Clips filmen', 'Content-Plan im Bereich "Promo" pflegen'],
+    when: (c) => started(c, 'name-check') || c.songsAtLeast('arrangement') >= 3,
+    priority: 3,
   },
   {
-    id: 'mailingliste',
-    phaseId: 'phase-buehne',
+    id: 'presse',
+    phaseId: 'phase-release',
     area: 'promo',
-    title: 'Fan-Mailingliste starten',
-    description: 'Ein eigener Kanal zu euren Fans – unabhängig von Algorithmen.',
-    why: 'Follower gehören der Plattform, E-Mail-Adressen gehören euch. Gerade zum Release, für Vorbestellungen und Gig-Ankündigungen ist die Liste Gold wert. Sammelt Adressen am Merchstand per QR-Code und über Bandcamp.',
-    tasks: ['Newsletter-Tool wählen (Datenschutz/Double-Opt-in beachten)', 'QR-Code für Merchstand & Bühne', 'Bandcamp-Follower einbeziehen'],
-    when: (c) => c.gigsPlayed >= 1 || c.releasesPlanned > 0,
-    priority: 6,
+    title: 'Playlists, Webzines & Podcasts anschreiben',
+    description: 'Eine Liste von 15–30 passenden Medien und Playlist-Kuratoren aufbauen.',
+    why: 'Metalcore-Webzines, YouTube-Kanäle, Podcasts und unabhängige Playlist-Kuratoren sind für Newcomer gut erreichbar. Kurze persönliche Mails mit privatem Stream-Link 3–4 Wochen vor Release wirken besser als Massenmails.',
+    tasks: ['Passende Medien/Kuratoren in den Kontakten sammeln', 'Pressetext & Mail-Vorlage', 'Persönlich anschreiben (3–4 Wochen vor Release)', 'Nachfassen nach ca. 1 Woche'],
+    when: (c) => c.releasesWithDate > 0,
+    metric: (c) => ({ value: c.contactsOfType('presse'), target: 15, label: 'Presse-/Playlist-Kontakte' }),
+    priority: 3,
   },
   {
     id: 'epk',
@@ -447,32 +443,120 @@ export const TEMPLATES: GoalTemplate[] = [
     area: 'promo',
     title: 'EPK (Electronic Press Kit) erstellen',
     description: 'Eine Seite/ein Ordner mit allem, was Presse und Veranstalter brauchen.',
-    why: 'Veranstalter und Presse entscheiden in Sekunden. Test: Findet jemand Fremdes in 30 Sekunden euren aktuellen Song, ein Pressefoto und eure Kontaktdaten? Die EPK-Checkliste im Bereich "Promo" führt euch durch alle Bestandteile.',
+    why: 'Veranstalter und Presse entscheiden in Sekunden. Test: Findet jemand Fremdes in 30 Sekunden euren aktuellen Song, ein Pressefoto und eure Kontaktdaten? Spätestens vor den ersten Booking-Anfragen nötig. Die EPK-Checkliste im Bereich "Promo" führt durch alle Bestandteile.',
     tasks: ['EPK-Checkliste im Bereich "Promo" abarbeiten', 'Als Webseite oder geteilter Ordner veröffentlichen', '30-Sekunden-Test mit Außenstehenden'],
-    when: (c) => c.releasesPlanned > 0 || c.gigsPlayed >= 2,
+    when: (c) => c.releasesPlanned > 0 || c.releasesReleased > 0,
+    priority: 4,
+  },
+  // ---------------- Live-Set & Bühne ----------------
+  {
+    id: 'live-rig',
+    phaseId: 'phase-buehne',
+    area: 'live',
+    title: 'Live-Rig für Backing-Tracks & Click aufbauen',
+    description: 'Ein zuverlässiges Playback-Setup für Electronics, Samples (und ggf. Drums) – geprobt ab Tag 1 der Probenphase.',
+    why: 'Electronics, Synths, 808s und Samples kommen bei eurem Sound live vom Track – das ist im Genre üblich. Entscheidend ist Zuverlässigkeit: Ein Absturz mitten im Set ist schlimmer als jeder Verspieler. Plant In-Ears für Click und Cues, getrennte Stems (damit die Technik vor Ort mischen kann) und einen Notfallplan. Probt von Anfang an mit dem Rig, nicht erst kurz vor dem ersten Gig.',
+    tasks: [
+      'Stems pro Song exportieren: Click, Cues/Ansagen, Electronics, Samples (ggf. Drums)',
+      'Playback-Lösung wählen (z.B. DAW auf Laptop oder dedizierter Player) + Audio-Interface',
+      'In-Ear-Monitoring für Click & Cues',
+      'Redundanz/Notfallplan (Backup-Gerät oder klare Routine bei Ausfall)',
+      'Kanalliste für die Technik vor Ort (Stems getrennt)',
+    ],
+    when: (c) => c.songsAtLeast('arrangement') >= 5 || started(c, 'besetzung-drums'),
+    trigger: () => 'Sinnvoll, bevor die Probenphase startet – das Setup braucht Vorlauf.',
+    priority: 2,
+  },
+  {
+    id: 'set-40',
+    phaseId: 'phase-buehne',
+    area: 'live',
+    title: '35–45-Minuten-Set zusammenstellen & durchproben',
+    description: 'Eine feste Setlist, die ihr mit Tracks am Stück sicher spielt.',
+    why: 'Ein Set ist mehr als die Summe der Songs: Übergänge (bei euch ideal mit Electronics/Interludes vom Track), Ansagen, Tuning-Wechsel, Dramaturgie (starker Opener, stärkster Song zum Schluss) und Kondition – gerade für die Vocals. Wer das Set mehrfach am Stück geprobt hat, wirkt beim ersten Gig souverän. Für erste Support-Slots reichen oft 25–30 Minuten, also auch eine Kurzversion planen.',
+    tasks: ['Setlist anlegen (Gig oder Probe-Set)', 'Übergänge/Interludes als Track-Elemente bauen', 'Ansagen planen', 'Set 3× am Stück mit Stoppuhr durchspielen', 'Kurzversion für 25–30-Minuten-Slots'],
+    when: (c) => c.songsAtLeast('probereif') >= 5 || c.songsWithVocals >= 8,
+    trigger: (c) => `${c.songsAtLeast('probereif')} live-ready Songs, ${c.songsWithVocals} Songs mit Vocals.`,
+    priority: 2,
+  },
+  {
+    id: 'erste-gigs',
+    phaseId: 'phase-buehne',
+    area: 'live',
+    title: 'Die ersten 3 Gigs in der Region Stuttgart spielen',
+    description: 'Realistische Einstiege: lokale Band-Reihen, Support-Slots, Jugendhaus-Bühnen.',
+    why: 'In Stuttgart gibt es Formate für regionale Bands, z.B. die Reihe "Region\'s Finest" im Club Zentral oder Konzerte im Jugendhaus West mit regionalen Supports; auch Metalcore-Abende wie "Core im Kessel" laufen dort. Veranstalter wollen vorher Musik hören – mit 1–2 Singles und einem Live-Clip aus dem Studio stehen eure Chancen deutlich besser. Lokale Bands aus der Szene (Gig-Tausch) sind der zweite Weg. Vorsicht bei Pay-to-Play-Angeboten.',
+    tasks: ['Kontakte im Bereich "Kontakte" vervollständigen (Booking-Mail auf den Websites)', 'Kurze Anfrage-Mail mit Singles/Demo-Links und Live-Clip vorbereiten', '3–5 regionale Bands aus eurem Genre ansprechen (Support / Gig-Tausch)', 'Freundeskreis als erstes Publikum mobilisieren'],
+    when: (c) => c.songsAtLeast('probereif') >= 5 || started(c, 'set-40'),
+    metric: (c) => ({ value: c.gigsPlayed, target: 3, label: 'Gigs gespielt' }),
+    priority: 1,
+  },
+  {
+    id: 'netzwerk-bands',
+    phaseId: 'phase-buehne',
+    area: 'live',
+    title: 'Netzwerk mit 5 Bands aus der Stuttgarter Core-Szene',
+    description: 'Bands aus eurer Szene kennenlernen, auf ihre Shows gehen, gemeinsame Abende planen.',
+    why: 'Gig-Tausch und gemeinsame Abende sind der realistischste Weg für neue Bands auf die Bühne – und raus aus der Region. Netzwerken könnt ihr schon jetzt, lange vor dem ersten Gig: auf Shows gehen, Content teilen, Kontakt halten. Und: Über die Szene findet ihr am ehesten auch Drummer:innen.',
+    tasks: ['Auf lokale Metalcore-Shows gehen (z.B. Club Zentral, JuHa West)', 'Bands in den Kontakten erfassen', 'Gegenseitig Content teilen', 'Einen gemeinsamen Abend planen'],
+    when: () => true,
+    metric: (c) => ({ value: c.contactsOfType('band'), target: 5, label: 'Band-Kontakte' }),
+    priority: 5,
+  },
+  {
+    id: 'stageplot',
+    phaseId: 'phase-buehne',
+    area: 'live',
+    title: 'Stage Plot & Technik-Rider erstellen',
+    description: 'Eine Seite mit Bühnenaufbau, Kanalliste (inkl. Track-Stems) und euren Anforderungen.',
+    why: 'Mit Backing-Tracks und In-Ears ist euer Setup technisch anspruchsvoller als bei vielen Newcomer-Bands. Veranstalter und Tontechnik müssen vorab wissen, wie viele Kanäle die Tracks brauchen und was ihr selbst mitbringt. Saubere Vorbereitung = entspannte Soundchecks = Wiederbuchung.',
+    tasks: ['Stage Plot zeichnen', 'Kanalliste (Instrumente, Vocals, Track-Stems)', 'Was bringt ihr mit, was braucht ihr vor Ort?', 'Als PDF im EPK ablegen'],
+    when: (c) => c.gigsUpcoming > 0 || c.gigsPlayed > 0 || started(c, 'erste-gigs') || started(c, 'live-rig'),
     priority: 3,
   },
   {
-    id: 'presse',
-    phaseId: 'phase-release',
+    id: 'live-video',
+    phaseId: 'phase-buehne',
     area: 'promo',
-    title: 'Presse, Webzines & Podcasts anschreiben',
-    description: 'Eine Liste von 15–30 passenden Medien aufbauen und rechtzeitig vor dem Release kontaktieren.',
-    why: 'Metal-Webzines, Blogs, Podcasts, Uni-Radios und Lokalpresse sind für Newcomer gut erreichbar. Kurze persönliche Mails mit privatem Stream-Link 4–6 Wochen vor Release wirken besser als Massenmails.',
-    tasks: ['Passende Medien in den Kontakten sammeln', 'Pressetext & Mail-Vorlage', 'Persönlich anschreiben (4–6 Wochen vor Release)', 'Nachfassen nach ca. 1 Woche'],
-    when: (c) => c.releasesWithDate > 0,
-    metric: (c) => ({ value: c.contactsOfType('presse'), target: 15, label: 'Presse-Kontakte' }),
+    title: 'Live-Session-Video im eigenen Studio drehen',
+    description: 'Ein Song "live im Studio" mit gutem Ton und mehreren Kameras – Booking-Material vor dem ersten Gig.',
+    why: 'Promoter wollen sehen, wie ihr live wirkt. Euer Vorteil: Im eigenen Studio könnt ihr eine Live-Session mit Studio-Ton aufnehmen, bevor es echte Gig-Aufnahmen gibt. Das hilft bei den ersten Anfragen und ist gleichzeitig starker Content.',
+    tasks: ['Song auswählen', '2–3 Kameras/Handys + Licht', 'Ton im Studio mitschneiden und mischen', 'Video schneiden + Kurzclips daraus'],
+    when: (c) => c.songsAtLeast('probereif') >= 2 || started(c, 'set-40'),
     priority: 3,
   },
-  // ---------------- Merch & Wachstum ----------------
+  {
+    id: 'mailingliste',
+    phaseId: 'phase-buehne',
+    area: 'promo',
+    title: 'Fan-Mailingliste starten',
+    description: 'Ein eigener Kanal zu euren Fans – unabhängig von Algorithmen.',
+    why: 'Follower gehören der Plattform, E-Mail-Adressen gehören euch. Für Single-Releases, Vorbestellungen und Gig-Ankündigungen ist die Liste Gold wert. Sammelt Adressen per QR-Code am Merchstand und über die Link-Seite.',
+    tasks: ['Newsletter-Tool wählen (Datenschutz/Double-Opt-in beachten)', 'Link auf der Link-Seite/Bio', 'QR-Code für Merchstand & Bühne'],
+    when: (c) => c.gigsPlayed >= 1 || c.releasesReleased > 0,
+    priority: 6,
+  },
+  // ---------------- Wachstum ----------------
+  {
+    id: 'regional',
+    phaseId: 'phase-wachstum',
+    area: 'live',
+    title: 'In 3 Städten außerhalb Stuttgarts spielen',
+    description: 'Raus aus der Region – über Gig-Tausch und Veranstalter in Nachbarstädten.',
+    why: 'Neue Städte bringen neues Publikum und zeigen Veranstaltern, dass ihr mehr seid als eine lokale Band – ein wichtiger Nachweis für Festivals und Booking-Agenturen. Realistisch: Städte in 1–2 Stunden Entfernung über Partnerbands.',
+    tasks: ['Partnerbands aus anderen Städten ansprechen', 'Veranstalter in 2–3 Städten anfragen', 'Fahrtkosten einplanen'],
+    when: (c) => c.gigsPlayed >= 3,
+    metric: (c) => ({ value: c.citiesPlayed, target: 4, label: 'Städte bespielt (inkl. Stuttgart)' }),
+    priority: 3,
+  },
   {
     id: 'merch-start',
     phaseId: 'phase-wachstum',
     area: 'merch',
     title: 'Kleine erste Merch-Auflage',
-    description: 'Sticker, Patches und ein Shirt-Motiv – klein starten, Risiko begrenzen.',
-    why: 'Merch ist für kleine Bands oft die wichtigste Einnahme pro Gig. Wer klein startet (z.B. Logo-Shirt in Schwarz, Sticker, Patches), vermeidet Kisten voller unverkaufter Größen. Vorbestellungen im Freundes- und Fankreis finanzieren die Auflage vor. Kartenzahlung am Stand erhöht den Umsatz spürbar.',
-    tasks: ['Motiv festlegen (meist Logo-Shirt)', 'Angebote von 2–3 Druckereien einholen', 'Vorbestellung im Umfeld', 'Sinnvollen Größenmix bestellen', 'Kartenleser + Preisliste für den Merchstand'],
+    description: 'Sticker und ein Shirt-Motiv – klein starten, Risiko begrenzen.',
+    why: 'Merch ist für kleine Bands oft die wichtigste Einnahme pro Gig. Wer klein startet (z.B. ein Shirt-Motiv, Sticker), vermeidet Kisten voller unverkaufter Größen. Vorbestellungen finanzieren die Auflage vor. Kartenzahlung am Stand erhöht den Umsatz spürbar.',
+    tasks: ['Motiv festlegen', 'Angebote von 2–3 Druckereien einholen', 'Vorbestellung im Umfeld', 'Sinnvollen Größenmix bestellen', 'Kartenleser + Preisliste für den Merchstand'],
     when: (c) => c.gigsPlayed >= 2 || c.gigsUpcoming >= 2,
     priority: 4,
   },
@@ -480,32 +564,32 @@ export const TEMPLATES: GoalTemplate[] = [
     id: 'foerderung',
     phaseId: 'phase-wachstum',
     area: 'finanzen',
-    title: 'Förderprogramme recherchieren',
-    description: 'Lokale und bundesweite Förderungen für Produktion, Live und Proberaum prüfen.',
-    why: 'Viele Städte und Länder haben Popbüros, Kulturämter oder Programme für Nachwuchsbands (Produktion, Auftritte, Proberäume). Die Initiative Musik fördert bundesweit Nachwuchskünstler:innen – Anträge brauchen einen Kostenplan und Vorlauf. Lokale Programme sind für den Start meist realistischer; Fristen unbedingt im Kalender eintragen.',
-    tasks: ['Lokales Popbüro / Kulturamt kontaktieren', 'Aktuelle Ausschreibungen & Fristen notieren', 'Kostenplan aus dem Release-Budget ableiten'],
-    when: (c) => c.releasesPlanned > 0 || done(c, 'debut-plan'),
-    priority: 5,
+    title: 'Weitere Förderungen: Land BW & bundesweit',
+    description: 'Größere Programme für Projekte, Touren und Produktionen prüfen, wenn ihr Releases und Live-Erfahrung habt.',
+    why: 'Neben dem Pop-Stipendium der Region gibt es auf Landesebene "Perspektive Pop 2.0" (POPLÄND, Baden-Württemberg; laut Richtlinie 2026 je Antrag 10.000–20.000 €, mind. die Hälfte der Band mit Hauptwohnsitz in BW) sowie die Programme der Popakademie Baden-Württemberg (z.B. Bandpool) und bundesweit die Initiative Musik. Diese Programme erwarten meist schon Veröffentlichungen, Live-Referenzen und einen durchdachten Kostenplan – daher eher für die Phase nach den ersten Singles.',
+    tasks: ['Aktuelle Ausschreibungen & Fristen notieren (Kalender)', 'Kostenplan aus Release-/Tourplanung ableiten', 'Beim Pop-Büro Region Stuttgart beraten lassen'],
+    when: (c) => c.releasesReleased >= 1 || done(c, 'popstipendium'),
+    priority: 4,
   },
   {
     id: 'festivals',
     phaseId: 'phase-wachstum',
     area: 'live',
-    title: 'Bei kleinen/regionalen Metal-Festivals bewerben',
-    description: 'Eine Liste passender Festivals mit Bewerbungszeiträumen pflegen.',
-    why: 'Kleinere Festivals buchen gern regionale Newcomer – die Bewerbungsphase liegt oft im Herbst/Winter für die nächste Saison. Voraussetzungen: veröffentlichte Musik, Live-Video, EPK und eine Handvoll Referenz-Gigs.',
-    tasks: ['10 passende regionale Festivals recherchieren', 'Bewerbungszeiträume im Kalender eintragen', 'EPK aktualisieren', 'Bewerbungen verschicken & nachhalten'],
-    when: (c) => c.releasesReleased >= 1 && c.gigsPlayed >= 5,
+    title: 'Bei regionalen Festivals & Core-Events bewerben',
+    description: 'Eine Liste passender Festivals und Core-Events mit Bewerbungszeiträumen pflegen.',
+    why: 'Kleinere Festivals und Core-Events in Baden-Württemberg buchen gern regionale Newcomer – die Bewerbungsphase liegt oft im Herbst/Winter für die nächste Saison. Voraussetzungen: veröffentlichte Musik, Live-Video, EPK und einige Referenz-Gigs.',
+    tasks: ['10 passende Festivals/Events in BW & Umgebung recherchieren', 'Bewerbungszeiträume im Kalender eintragen', 'EPK aktualisieren', 'Bewerbungen verschicken & nachhalten'],
+    when: (c) => c.releasesReleased >= 1 && c.gigsPlayed >= 4,
     priority: 3,
   },
   {
     id: 'metal-battle',
     phaseId: 'phase-wachstum',
     area: 'live',
-    title: 'Für Wacken Metal Battle & Band-Contests bewerben',
-    description: 'Nationale Vorentscheide des Metal Battle oder vergleichbare Newcomer-Contests.',
-    why: 'Der Metal Battle richtet sich an unsignierte Bands; Gewinner:innen der nationalen Vorentscheide spielen in Wacken. Reisekosten trägt in der Regel die Band selbst. Ohne gute Aufnahmen und Live-Video sind die Chancen gering – daher erst nach dem Debüt sinnvoll. Bei anderen Contests auf Teilnahmegebühren und Pay-to-Play achten.',
-    tasks: ['Aktuelle Ausschreibung & Frist recherchieren', 'EPK & Live-Video aktualisieren', 'Bewerbung einreichen'],
+    title: 'Für Band-Contests bewerben (z.B. Wacken Metal Battle)',
+    description: 'Nationale Vorentscheide oder vergleichbare Newcomer-Contests.',
+    why: 'Der Metal Battle richtet sich an unsignierte Bands; Gewinner:innen der nationalen Vorentscheide spielen in Wacken, Reisekosten trägt in der Regel die Band. Ohne gute Aufnahmen und Live-Video sind die Chancen gering – daher erst nach den ersten Releases sinnvoll. Klärt bei Contests vorher, ob Backing-Tracks erlaubt sind, und achtet auf Teilnahmegebühren/Pay-to-Play.',
+    tasks: ['Aktuelle Ausschreibungen & Fristen recherchieren', 'Regeln zu Backing-Tracks prüfen', 'EPK & Live-Video aktualisieren', 'Bewerbung einreichen'],
     when: (c) => c.releasesReleased >= 1 && c.gigsPlayed >= 5,
     priority: 5,
   },
@@ -513,11 +597,11 @@ export const TEMPLATES: GoalTemplate[] = [
     id: 'naechstes-release',
     phaseId: 'phase-wachstum',
     area: 'release',
-    title: 'Nächstes Release planen (EP/Album)',
-    description: 'Aus den Erfahrungen des Debüts das nächste, größere Release planen.',
-    why: 'Regelmäßige Veröffentlichungen halten euch im Gespräch. Mit Live-Erfahrung, Kontakten und einer ersten Fanbase lohnt sich ein größeres Projekt – inklusive physischer Formate (CD, Tape, Vinyl), die in der Metal-Szene gefragt sind.',
-    tasks: ['Learnings vom Debüt auswerten', 'Songauswahl aus der Pipeline', 'Budget & Förderung prüfen', 'Physische Formate kalkulieren'],
-    when: (c) => c.releasesReleased >= 1 && c.songsAtLeast('arrangement') >= 4,
+    title: 'Erste EP / erstes Album planen',
+    description: 'Die Singles plus neue Songs zu einem größeren Release bündeln.',
+    why: 'Nach mehreren Singles mit Publikum, Live-Erfahrung und Kontakten lohnt sich ein größeres Release – die Singles tragen es mit. Mit 9–10 Songs habt ihr das Material dafür bereits in der Pipeline.',
+    tasks: ['Learnings aus den Singles auswerten (Zahlen, Feedback)', 'Songauswahl & Reihenfolge', 'Budget & Förderung prüfen', 'Physische Formate kalkulieren (CD, Vinyl)'],
+    when: (c) => c.releasesReleased >= 2,
     priority: 4,
   },
 ]
@@ -534,13 +618,14 @@ export function getSuggestions(dismissed: string[]): Suggestion[] {
   const c = buildCtx()
   const existing = new Set(store.list('goals').map((g) => g.templateId).filter(Boolean))
   const phaseOrder: Record<string, number> = Object.fromEntries(PHASES.map((p) => [p.id, p.order]))
+  for (const p of store.list('phases')) phaseOrder[p.id] = p.order
   return TEMPLATES.filter((t) => !existing.has(t.id) && !dismissed.includes(t.id) && t.when(c))
     .map((t) => {
       const m = t.metric?.(c)
       const reason = t.trigger?.(c) || (m ? `Aktuell: ${m.value}/${m.target} ${m.label}.` : '')
       return { template: t, reason }
     })
-    .sort((a, b) => phaseOrder[a.template.phaseId] * 2 + a.template.priority - (phaseOrder[b.template.phaseId] * 2 + b.template.priority))
+    .sort((a, b) => (phaseOrder[a.template.phaseId] ?? 9) * 2 + a.template.priority - ((phaseOrder[b.template.phaseId] ?? 9) * 2 + b.template.priority))
 }
 
 export function goalFromTemplate(t: GoalTemplate, focus = false): Partial<Goal> {
@@ -575,7 +660,7 @@ export const CHECKLISTS: Record<string, { title: string; description: string; it
     items: [
       { group: 'business', section: 'Organisation', title: 'Band-Vereinbarung (GbR) unterschrieben', hint: 'Einnahmen, Kosten, Equipment, Namensrechte, Ein-/Ausstieg, Entscheidungen.' },
       { group: 'business', section: 'Organisation', title: 'Bandkasse / Bandkonto eingerichtet', hint: 'Getrennt von privaten Konten – erleichtert Abrechnung und Steuer.' },
-      { group: 'business', section: 'Organisation', title: 'Proberaum vertraglich geregelt', hint: 'Wer ist Mieter:in? Kündigungsfristen? Zugang & Schlüssel?' },
+      { group: 'business', section: 'Organisation', title: 'Studio-/Proberaum-Nutzung geregelt', hint: 'Das Studio gehört einem Mitglied: Kostenbeteiligung, Zeiten, Equipment-Nutzung festhalten.' },
       { group: 'business', section: 'Organisation', title: 'Zuständigkeiten verteilt', hint: 'Booking, Social Media, Kasse, Merch, Technik, Termine.' },
       { group: 'business', section: 'Organisation', title: 'Equipment-Inventar & Versicherung', hint: 'Seriennummern, Fotos, Versicherungsschutz außerhalb der Wohnung.' },
       { group: 'business', section: 'Rechte & Verwertung', title: 'Bandname geprüft (Metallum, Plattformen, Markenregister)', hint: 'Spart späteren Ärger und Verwechslungen auf Spotify.' },
@@ -627,7 +712,11 @@ export const CHECKLISTS: Record<string, { title: string; description: string; it
       { group: 'live', section: 'Vorbereitung', title: 'Setlist in großer Schrift ausgedruckt', hint: '' },
       { group: 'live', section: 'Packliste', title: 'Ersatzsaiten, Sticks, Felle, Plektren', hint: '' },
       { group: 'live', section: 'Packliste', title: 'Kabel, Netzteile, Batterien, Gaffa-Tape', hint: '' },
-      { group: 'live', section: 'Packliste', title: 'Stimmgeräte, In-Ears/Click falls genutzt', hint: '' },
+      { group: 'live', section: 'Packliste', title: 'Stimmgeräte, In-Ears, Kopfhörer-Verstärker', hint: '' },
+      { group: 'live', section: 'Backing-Tracks', title: 'Playback-Rechner/-Player geladen, Updates & Benachrichtigungen aus', hint: 'Flugmodus, Energiesparen aus, Set-Projekt geöffnet.' },
+      { group: 'live', section: 'Backing-Tracks', title: 'Backup bereit (zweites Gerät oder USB-Stick mit Set)', hint: '' },
+      { group: 'live', section: 'Backing-Tracks', title: 'Stems & Kanalliste mit der Technik abgestimmt', hint: 'Welche Stems auf welche Kanäle, wer mischt die Tracks?' },
+      { group: 'live', section: 'Backing-Tracks', title: 'Line-Check der Tracks beim Soundcheck', hint: '' },
       { group: 'live', section: 'Merchstand', title: 'Kartenleser + Wechselgeld', hint: '' },
       { group: 'live', section: 'Merchstand', title: 'Preisliste & Größenübersicht', hint: '' },
       { group: 'live', section: 'Merchstand', title: 'QR-Code für Mailingliste/Socials', hint: '' },
@@ -677,12 +766,134 @@ export function releaseTimeline(type: ReleaseType): Omit<ReleaseTask, 'id' | 'do
   ]
 }
 
-// ---------------- Start-Daten ----------------
+// ---------------- Start-Daten & Band-Profil ----------------
+
+export const PROFILE_VERSION = 2
+
+const STUTTGART_CONTACTS: Partial<Contact>[] = [
+  {
+    name: 'Pop-Büro Region Stuttgart',
+    type: 'sonstiges',
+    city: 'Stuttgart',
+    web: 'https://www.popbuero.de',
+    notes: 'Öffentliche Anlaufstelle für Bands aus der Region (Wirtschaftsförderung Region Stuttgart + Stuttgarter Jugendhaus). Pop-Stipendien/Produktionsstipendien (2026: 5.000 €), Beratung, Künstlerverzeichnis, ABOUT-POP-Festival. Aktuelle Kontaktdaten auf der Website prüfen.',
+    nextStep: 'Ausschreibung Pop-Stipendium prüfen, Band im Künstlerverzeichnis eintragen',
+  },
+  {
+    name: 'Club Zentral',
+    type: 'venue',
+    city: 'Stuttgart',
+    notes: 'Reihe "Region\'s Finest" mit regionalen Bands (laut Ankündigungen präsentiert mit Listen Loud Group und stjg) sowie Metalcore-Abende wie "Core im Kessel". Booking-Kontakt auf der Website prüfen.',
+    nextStep: 'Auf Shows gehen; nach ersten Singles für Region\'s Finest anfragen',
+  },
+  {
+    name: 'JuHa West (Jugendhaus West)',
+    type: 'venue',
+    city: 'Stuttgart',
+    notes: 'Konzerte aus Hardcore, Punk und Metal, oft mit regionalen Support-Bands. Booking-Kontakt auf der Website prüfen.',
+    nextStep: 'Auf Shows gehen, Konzertteam kennenlernen',
+  },
+  {
+    name: 'Listen Loud Group',
+    type: 'veranstalter',
+    city: 'Stuttgart',
+    notes: 'Laut Veranstaltungsankündigungen Mitveranstalter der Reihe "Region\'s Finest". Kontakt recherchieren.',
+    nextStep: '',
+  },
+  {
+    name: 'clubCANN',
+    type: 'venue',
+    city: 'Stuttgart-Bad Cannstatt',
+    notes: 'Internationale Metalcore-Touren – langfristiges Ziel für Support-Slots, wenn ihr regional etabliert seid.',
+    nextStep: '',
+  },
+]
+
+function nextWednesday(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + ((3 - d.getDay() + 7) % 7))
+  const y = d.getFullYear()
+  return `${y}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Passt bestehende oder neue Daten an euer Band-Profil an (idempotent, überschreibt nichts,
+ * was ihr selbst geändert habt).
+ */
+export function applyBandProfile() {
+  const settings = store.list('settings')[0]
+  if (settings && (settings.profileVersion ?? 0) >= PROFILE_VERSION) return
+
+  // Phasen: neue Struktur, nur unveränderte Standard-Phasen werden angepasst
+  const phases = store.list('phases')
+  store.putMany(
+    'phases',
+    PHASES.filter((p) => {
+      const cur = phases.find((x) => x.id === p.id)
+      return !cur || cur.title === OLD_PHASE_TITLES[p.id]
+    }).map((p) => ({ ...p })),
+  )
+
+  // Alte Standard-Ziele auf die neuen Vorlagen umstellen
+  const goals = store.list('goals')
+  const replace: Record<string, string> = { 'songs-6': 'songs-10', proberoutine: 'mittwochs-session', 'set-30': 'set-40' }
+  for (const g of goals) {
+    const to = g.templateId && replace[g.templateId]
+    if (to && !goals.some((x) => x.templateId === to)) {
+      const t = TEMPLATE_BY_ID[to]
+      store.put('goals', { ...goalFromTemplate(t, g.focus || !!t.focus), id: g.id, status: g.status, ownerIds: g.ownerIds, due: g.due })
+    }
+  }
+  // Neue Start-Ziele ergänzen
+  const after = store.list('goals')
+  const missing = TEMPLATES.filter((t) => t.seed && !after.some((g) => g.templateId === t.id))
+  store.putMany('goals', missing.map((t) => goalFromTemplate(t, !!t.focus)))
+  // Fokus auf max. 3 begrenzen: unberührte Bandvertrag-Fokus-Markierung zurücknehmen
+  const bv = store.list('goals').find((g) => g.templateId === 'bandvertrag' && g.focus && g.status === 'offen')
+  if (bv && store.list('goals').filter((g) => g.focus && g.status !== 'erledigt').length > 3) store.put('goals', { id: bv.id, focus: false })
+
+  // Mitglieder (nur wenn noch keine angelegt sind)
+  if (!store.list('members').length) {
+    store.putMany('members', [
+      { name: 'Gitarre', roles: 'Gitarre', responsibilities: '', color: '#dc2626' },
+      { name: 'Bass', roles: 'Bass', responsibilities: '', color: '#3b82f6' },
+      { name: 'Gesang', roles: 'Vocals (Screams, Cleans, Rap)', responsibilities: '', color: '#eab308' },
+    ])
+  }
+
+  // Wöchentliche Songwriting-Session am Mittwoch
+  if (!store.list('events').some((e) => e.key === 'mittwoch')) {
+    store.put('events', {
+      key: 'mittwoch',
+      title: 'Songwriting-Session im Studio',
+      type: 'probe',
+      date: nextWednesday(),
+      time: '',
+      repeat: 'weekly',
+      repeatUntil: '',
+      skipDates: [],
+      notes: 'Agenda-Vorschlag: 1 Song Feinschliff Instrumental · 1 Song Vocals · 15 Min. Orga/Roadmap · Bounce in Song-Karte verlinken · 2–3 Clips für Social Media.',
+    })
+  }
+
+  // Kontakte aus der Region
+  const contacts = store.list('contacts')
+  store.putMany(
+    'contacts',
+    STUTTGART_CONTACTS.filter((c) => !contacts.some((x) => x.name === c.name)).map((c) => ({ email: '', phone: '', web: '', lastContact: '', ...c })),
+  )
+
+  store.put('settings', {
+    id: 'settings',
+    genre: settings?.genre || 'Modern Metalcore × Electronic × Trap/Rap',
+    hometown: settings?.hometown || 'Region Stuttgart',
+    profileVersion: PROFILE_VERSION,
+  })
+}
 
 export function seedInitialData(bandName = '') {
   store.putMany('phases', PHASES.map((p) => ({ ...p })))
-  const goals = TEMPLATES.filter((t) => t.seed).map((t) => ({ ...goalFromTemplate(t, !!t.focus) }))
-  store.putMany('goals', goals)
+  store.putMany('goals', TEMPLATES.filter((t) => t.seed).map((t) => goalFromTemplate(t, !!t.focus)))
   for (const g of Object.keys(CHECKLISTS)) seedChecklist(g)
   const s: Partial<CollectionMap['settings']> = {
     id: 'settings',
@@ -693,6 +904,8 @@ export function seedInitialData(bandName = '') {
     lastReview: Date.now(),
     seeded: true,
     monthlyFee: null,
+    profileVersion: 0,
   }
   store.put('settings', s)
+  applyBandProfile()
 }

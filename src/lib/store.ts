@@ -37,8 +37,11 @@ class Store {
     this.load('local')
   }
 
+  private loaded = false
+
   load(scope: string) {
-    this.flush()
+    // Erst den bisherigen Scope sichern – aber nie vor dem ersten Laden (sonst würden gespeicherte Daten überschrieben)
+    if (this.loaded) this.flush()
     this.scope = scope
     this.recs.clear()
     this.pending.clear()
@@ -50,6 +53,7 @@ class Store {
     } catch (e) {
       console.error('Konnte lokale Daten nicht laden', e)
     }
+    this.loaded = true
     this.emit(false)
   }
 
@@ -94,6 +98,7 @@ class Store {
   }
 
   flush() {
+    if (!this.loaded) return
     if (this.saveTimer) {
       clearTimeout(this.saveTimer)
       this.saveTimer = null

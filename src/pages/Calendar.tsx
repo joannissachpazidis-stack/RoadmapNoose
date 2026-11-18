@@ -5,7 +5,7 @@ import { EVENT_TYPES, GIG_STATUS } from '../lib/constants'
 import { addDays, fmtDate, toISO, todayISO } from '../lib/format'
 import { go } from '../lib/router'
 import { store, useCollection } from '../lib/store'
-import type { CalEvent, EventType } from '../types'
+import type { CalEvent, EventType, Repeat } from '../types'
 
 export interface CalItem {
   date: string
@@ -17,14 +17,34 @@ export interface CalItem {
   onClick: () => void
 }
 
-export function useCalendarItems(onEvent: (e: CalEvent) => void): CalItem[] {
+/** Einzeltermine einer Serie im Fenster [-90, +400] Tage um heute */
+export function occurrences(e: CalEvent): string[] {
+  if (!e.date) return []
+  if (!e.repeat || e.repeat === 'none') return [e.date]
+  const step = e.repeat === 'weekly' ? 7 : 14
+  const from = addDays(todayISO(), -90)
+  const to = e.repeatUntil && e.repeatUntil < addDays(todayISO(), 400) ? e.repeatUntil : addDays(todayISO(), 400)
+  const out: string[] = []
+  let d = e.date
+  // zum Fensterbeginn springen
+  if (d < from) {
+    const diff = Math.floor((new Date(from + 'T12:00:00').getTime() - new Date(d + 'T12:00:00').getTime()) / 86400000)
+    d = addDays(d, Math.floor(diff / step) * step)
+  }
+  for (; d <= to; d = addDays(d, step)) if (d >= from && !(e.skipDates ?? []).includes(d)) out.push(d)
+  return out
+}
+
+export function useCalendarItems(onEvent: (e: CalEvent, date: string) => void): CalItem[] {
   const events = useCollection('events')
   const gigs = useCollection('gigs')
   const goals = useCollection('goals')
   const releases = useCollection('releases')
   return useMemo(() => {
     const items: CalItem[] = []
-    for (const e of events) if (e.date) items.push({ date: e.date, time: e.time, title: e.title, kind: 'event', color: '#71717a', label: EVENT_TYPES[e.type], onClick: () => onEvent(e) })
+    for (const e of events)
+      for (const d of occurrences(e))
+        items.push({ date: d, time: e.time, title: e.title, kind: 'event', color: e.type === 'probe' ? '#0d9488' : '#71717a', label: EVENT_TYPES[e.type] + (e.repeat && e.repeat !== 'none' ? ' · Serie' : ''), onClick: () => onEvent(e, d) })
     for (const g of gigs)
       if (g.date && g.status !== 'abgesagt' && g.status !== 'idee')
         items.push({ date: g.date, time: g.time, title: `${g.venue}${g.city ? ', ' + g.city : ''}`, kind: 'gig', color: '#f97316', label: 'Gig · ' + GIG_STATUS[g.status].label, onClick: () => go('live', g.id) })
@@ -39,8 +59,9 @@ export function useCalendarItems(onEvent: (e: CalEvent) => void): CalItem[] {
   }, [events, gigs, goals, releases])
 }
 
-export function EventModal({ event, onClose }: { event: Partial<CalEvent>; onClose: () => void }) {
+export function EventModal({ event, occurrence, onClose }: { event: Partial<CalEvent>; occurrence?: string; onClose: () => void }) {
   const [e, setE] = useState(event)
+  const isSeries = !!event.id && !!event.repeat && event.repeat !== 'none'
   const set = (p: Partial<CalEvent>) => setE((x) => ({ ...x, ...p }))
   return (
     <Modal
@@ -50,8 +71,13 @@ export function EventModal({ event, onClose }: { event: Partial<CalEvent>; onClo
       footer={
         <>
           {event.id && (
-            <Button variant="danger" className="mr-auto" onClick={() => confirmDelete(e.title ?? '') && (store.remove(event.id!), onClose())}>
+            <Button variant="danger" className="mr-auto" title={isSeries ? 'Ganze Serie löschen' : 'Löschen'} onClick={() => confirmDelete(isSeries ? `${e.title} (ganze Serie)` : e.title ?? '') && (store.remove(event.id!), onClose())}>
               <Trash2 size={16} />
+            </Button>
+          )}
+          {isSeries && occurrence && (
+            <Button onClick={() => (store.put('events', { id: event.id, skipDates: [...(event.skipDates ?? []), occurrence] }), onClose())}>
+              Nur {fmtDate(occurrence)} absagen
             </Button>
           )}
           <Button variant="primary" disabled={!e.title || !e.date} onClick={() => (store.put('events', e), onClose())}>
@@ -68,13 +94,39 @@ export function EventModal({ event, onClose }: { event: Partial<CalEvent>; onClo
           <Field label="Art">
             <Select value={e.type} onChange={(x) => set({ type: x.target.value as EventType })} options={Object.entries(EVENT_TYPES).map(([v, label]) => ({ value: v, label }))} />
           </Field>
-          <Field label="Datum">
+          <Field label={e.repeat && e.repeat !== 'none' ? 'Erster Termin' : 'Datum'}>
             <Input type="date" value={e.date ?? ''} onChange={(x) => set({ date: x.target.value })} />
           </Field>
           <Field label="Uhrzeit">
             <Input type="time" value={e.time ?? ''} onChange={(x) => set({ time: x.target.value })} />
           </Field>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Wiederholen">
+            <Select
+              value={e.repeat ?? 'none'}
+              onChange={(x) => set({ repeat: x.target.value as Repeat })}
+              options={[
+                { value: 'none', label: 'Einmalig' },
+                { value: 'weekly', label: 'Jede Woche' },
+                { value: 'biweekly', label: 'Alle 2 Wochen' },
+              ]}
+            />
+          </Field>
+          {e.repeat && e.repeat !== 'none' && (
+            <Field label="Bis (optional)">
+              <Input type="date" value={e.repeatUntil ?? ''} onChange={(x) => set({ repeatUntil: x.target.value })} />
+            </Field>
+          )}
+        </div>
+        {isSeries && (event.skipDates?.length ?? 0) > 0 && (
+          <div className="text-xs text-muted">
+            Abgesagt: {event.skipDates!.map((d) => fmtDate(d)).join(', ')}{' '}
+            <button className="underline" onClick={() => set({ skipDates: [] })}>
+              zurücksetzen
+            </button>
+          </div>
+        )}
         <Field label="Notizen / Agenda">
           <Textarea value={e.notes ?? ''} onChange={(x) => set({ notes: x.target.value })} />
         </Field>
@@ -87,7 +139,8 @@ const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
 export default function Calendar() {
   const [edit, setEdit] = useState<Partial<CalEvent> | null>(null)
-  const items = useCalendarItems((e) => setEdit(e))
+  const [occ, setOcc] = useState<string | undefined>()
+  const items = useCalendarItems((e, d) => (setEdit(e), setOcc(d)))
   const [month, setMonth] = useState(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -113,7 +166,7 @@ export default function Calendar() {
         title="Kalender"
         subtitle="Proben, Meetings, Studio, Gigs, Ziel-Deadlines und alle Schritte eurer Release-Zeitpläne an einem Ort."
         actions={
-          <Button variant="primary" onClick={() => setEdit({ title: '', type: 'probe', date: selected ?? today, time: '', notes: '' })}>
+          <Button variant="primary" onClick={() => (setOcc(undefined), setEdit({ title: '', type: 'probe', date: selected ?? today, time: '', notes: '', repeat: 'none' }))}>
             <Plus size={16} /> Termin
           </Button>
         }
@@ -182,7 +235,7 @@ export default function Calendar() {
         ))}
         {!agenda.length && <div className="text-sm text-muted">Keine Termine.</div>}
       </div>
-      {edit && <EventModal key={edit.id ?? 'new'} event={edit} onClose={() => setEdit(null)} />}
+      {edit && <EventModal key={(edit.id ?? 'new') + (occ ?? '')} event={edit} occurrence={occ} onClose={() => setEdit(null)} />}
     </div>
   )
 }

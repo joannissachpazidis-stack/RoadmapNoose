@@ -3,11 +3,11 @@ import type { Area, ContactType, ContentStatus, EventType, GigStatus, GoalStatus
 export const SONG_STAGES: { key: SongStage; label: string; hint: string; color: string }[] = [
   { key: 'idee', label: 'Idee / Riff', hint: 'Riff, Melodie oder Konzept existiert – z.B. als Handy-Memo.', color: '#52525b' },
   { key: 'skizze', label: 'Skizze', hint: 'Grobe Struktur, die Hauptteile stehen.', color: '#6b7280' },
-  { key: 'arrangement', label: 'Arrangement', hint: 'Band arbeitet den Song im Proberaum aus, Struktur wird fix.', color: '#a16207' },
-  { key: 'demo', label: 'Pre-Prod / Demo', hint: 'Demo mit Vocals & Lyrics, Feinschliff an Details und Übergängen.', color: '#ca8a04' },
-  { key: 'probereif', label: 'Probe-reif', hint: 'Alle können den Song sicher spielen – bereit für die Bühne.', color: '#16a34a' },
+  { key: 'arrangement', label: 'Instrumental steht', hint: 'Instrumental weitgehend fertig (Struktur, Riffs, Drums programmiert) – Vocals & Lyrics fehlen noch.', color: '#a16207' },
+  { key: 'demo', label: 'Pre-Prod mit Vocals', hint: 'Pre-Production-Demo mit Vocals & Lyrics – der Song ist komplett, Feinschliff folgt in Recording & Proben.', color: '#ca8a04' },
+  { key: 'probereif', label: 'Live-ready', hint: 'Alle Parts sitzen inkl. Backing-Track/Click – bereit für die Bühne.', color: '#16a34a' },
   { key: 'liveerprobt', label: 'Live erprobt', hint: 'Mind. einmal live gespielt, Feedback ist eingearbeitet.', color: '#0d9488' },
-  { key: 'aufnahme', label: 'Aufnahme', hint: 'Wird gerade aufgenommen.', color: '#2563eb' },
+  { key: 'aufnahme', label: 'Recording', hint: 'Finale Aufnahmen laufen.', color: '#2563eb' },
   { key: 'mix', label: 'Mix / Master', hint: 'Im Mixing oder Mastering.', color: '#7c3aed' },
   { key: 'veroeffentlicht', label: 'Veröffentlicht', hint: 'Draußen auf allen Plattformen.', color: '#dc2626' },
   { key: 'archiv', label: 'Archiv', hint: 'Auf Eis gelegt – Ideen bleiben erhalten.', color: '#3f3f46' },
@@ -20,18 +20,34 @@ export function stageAtLeast(stage: SongStage, min: SongStage): boolean {
   return STAGE_INDEX[stage] >= STAGE_INDEX[min]
 }
 
-export const SONG_PARTS: { key: string; label: string }[] = [
-  { key: 'riffs', label: 'Hauptriffs' },
-  { key: 'structure', label: 'Songstruktur fix' },
-  { key: 'drums', label: 'Drums ausgearbeitet' },
-  { key: 'bass', label: 'Bass-Linie' },
-  { key: 'rhythm', label: 'Rhythmus-Gitarren' },
-  { key: 'leads', label: 'Leads / Soli' },
-  { key: 'vocals', label: 'Vocal-Linien' },
-  { key: 'lyrics', label: 'Lyrics fertig' },
-  { key: 'transitions', label: 'Intro/Outro & Übergänge' },
-  { key: 'demo', label: 'Demo aufgenommen' },
+export const SONG_PARTS: { key: string; label: string; group: 'Instrumental' | 'Vocals' | 'Finish' }[] = [
+  { key: 'riffs', label: 'Riffs & Hauptideen', group: 'Instrumental' },
+  { key: 'structure', label: 'Songstruktur fix', group: 'Instrumental' },
+  { key: 'drums', label: 'Drums programmiert', group: 'Instrumental' },
+  { key: 'guitars', label: 'Gitarren', group: 'Instrumental' },
+  { key: 'bass', label: 'Bass', group: 'Instrumental' },
+  { key: 'leads', label: 'Leads / Melodien', group: 'Instrumental' },
+  { key: 'electronics', label: 'Electronics / Synths / Samples', group: 'Instrumental' },
+  { key: 'breakdown', label: 'Breakdown(s)', group: 'Instrumental' },
+  { key: 'lyrics', label: 'Lyrics fertig', group: 'Vocals' },
+  { key: 'screams', label: 'Screams / Shouts', group: 'Vocals' },
+  { key: 'cleans', label: 'Cleans / Hook', group: 'Vocals' },
+  { key: 'rap', label: 'Rap- / Trap-Parts', group: 'Vocals' },
+  { key: 'transitions', label: 'Intro/Outro & Übergänge', group: 'Finish' },
+  { key: 'demo', label: 'Pre-Prod-Demo mit Vocals', group: 'Finish' },
 ]
+
+/** Fortschritt der Bausteine: 'na' (nicht nötig) zählt nicht mit */
+export function partsProgress(parts: Record<string, boolean | 'na'> | undefined) {
+  const p = parts ?? {}
+  const relevant = SONG_PARTS.filter((x) => p[x.key] !== 'na')
+  return { done: relevant.filter((x) => p[x.key] === true).length, total: relevant.length }
+}
+
+export function hasVocals(parts: Record<string, boolean | 'na'> | undefined) {
+  const p = parts ?? {}
+  return p.lyrics === true && (p.screams === true || p.cleans === true || p.rap === true)
+}
 
 export const READINESS = [
   { v: 0, label: 'Kann ich noch nicht', short: '✗', color: '#7f1d1d' },

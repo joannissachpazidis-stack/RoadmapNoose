@@ -65,6 +65,8 @@ export type SongStage =
   | 'veroeffentlicht'
   | 'archiv'
 
+export type PartState = boolean | 'na'
+
 export interface Song extends Base {
   title: string
   stage: SongStage
@@ -72,7 +74,7 @@ export interface Song extends Base {
   bpm: number | null
   songKey: string
   durationSec: number | null
-  parts: Record<string, boolean>
+  parts: Record<string, PartState> // true = fertig, 'na' = wird für diesen Song nicht gebraucht
   readiness: Record<string, number> // memberId -> 0 (kann nicht), 1 (wackelig), 2 (sitzt)
   composers: string
   lyricists: string
@@ -129,12 +131,18 @@ export interface Gig extends Base {
 
 export type EventType = 'probe' | 'meeting' | 'studio' | 'shooting' | 'deadline' | 'sonstiges'
 
+export type Repeat = 'none' | 'weekly' | 'biweekly'
+
 export interface CalEvent extends Base {
   title: string
   type: EventType
-  date: string
+  date: string // bei Serien: erster Termin
   time: string
   notes: string
+  repeat?: Repeat
+  repeatUntil?: string
+  skipDates?: string[] // abgesagte Einzeltermine einer Serie
+  key?: string // interne Kennung für automatisch angelegte Termine
 }
 
 export type ContactType =
@@ -208,6 +216,7 @@ export interface Settings extends Base {
   lastReview: number
   seeded: boolean
   monthlyFee: number | null
+  profileVersion?: number
 }
 
 export interface CollectionMap {

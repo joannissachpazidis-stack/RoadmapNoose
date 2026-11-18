@@ -18,9 +18,9 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { cx } from './components/ui'
-import { seedInitialData } from './lib/roadmap'
+import { PROFILE_VERSION, applyBandProfile, seedInitialData } from './lib/roadmap'
 import { go, useRoute, type Route } from './lib/router'
-import { store, useSettings } from './lib/store'
+import { store, useSettings, useStoreVersion } from './lib/store'
 import { useSync } from './lib/sync'
 import Calendar from './pages/Calendar'
 import Contacts from './pages/Contacts'
@@ -80,6 +80,13 @@ export default function App() {
   useEffect(() => {
     if (store.scope === 'local' && !store.hasData()) seedInitialData()
   }, [])
+
+  // Bestehende Daten einmalig an das Band-Profil anpassen (erst wenn Daten geladen sind)
+  const version = useStoreVersion()
+  useEffect(() => {
+    const s = store.list('settings')[0]
+    if (s && (s.profileVersion ?? 0) < PROFILE_VERSION) applyBandProfile()
+  }, [version])
 
   useEffect(() => setMenu(false), [route])
 

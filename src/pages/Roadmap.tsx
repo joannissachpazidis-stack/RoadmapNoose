@@ -1,7 +1,7 @@
 import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, EyeOff, Lightbulb, Pencil, Plus, Star } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import GoalModal, { GoalMetric, newGoal } from '../components/GoalModal'
-import { Badge, Button, Card, Checkbox, Empty, Field, Input, Modal, PageHeader, Progress, Select, Textarea, cx } from '../components/ui'
+import { Badge, Button, Card, Checkbox, Empty, Field, Input, Modal, NumberInput, PageHeader, Progress, Select, Textarea, cx } from '../components/ui'
 import { AREAS, GOAL_STATUS } from '../lib/constants'
 import { addDays, daysUntil, fmtDate, relDays, timeAgo, todayISO } from '../lib/format'
 import { addTemplateGoal, getSuggestions, type Suggestion } from '../lib/roadmap'
@@ -138,9 +138,14 @@ function PhaseModal({ phase, onClose }: { phase: Partial<Phase>; onClose: () => 
         <Field label="Titel">
           <Input value={p.title ?? ''} onChange={(e) => setP({ ...p, title: e.target.value })} />
         </Field>
-        <Field label="Zeithorizont">
-          <Input value={p.horizon ?? ''} onChange={(e) => setP({ ...p, horizon: e.target.value })} placeholder="z.B. 6–12 Monate" />
-        </Field>
+        <div className="grid grid-cols-[1fr_110px] gap-3">
+          <Field label="Zeithorizont">
+            <Input value={p.horizon ?? ''} onChange={(e) => setP({ ...p, horizon: e.target.value })} placeholder="z.B. 6–12 Monate" />
+          </Field>
+          <Field label="Reihenfolge">
+            <NumberInput value={p.order ?? null} onChange={(v) => setP({ ...p, order: v ?? 0 })} />
+          </Field>
+        </div>
         <Field label="Beschreibung">
           <Textarea value={p.description ?? ''} onChange={(e) => setP({ ...p, description: e.target.value })} />
         </Field>
